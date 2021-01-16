@@ -1,5 +1,8 @@
 from PhoneSensor import PhoneSensor
+from matplotlib import pyplot as plt
 
 phone = PhoneSensor()
 
-print(phone.grab())
+img = phone.grab()
+plt.imshow(img) # type: ignore
+plt.show()

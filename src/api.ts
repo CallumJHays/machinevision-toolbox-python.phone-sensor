@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Observable } from "./observable";
 
 type CameraGrabApiMsg = {
   cmd: "grab";
@@ -12,10 +13,18 @@ type ImuApiMsg = {
   wait: number | null;
 };
 
-type ApiMsg = CameraGrabApiMsg | ImuApiMsg;
+type ServerDisconnectMsg = {
+  cmd: "disconnect"; // occurs when a second client attempts to connect - switches to newest
+};
+
+type ApiMsg = CameraGrabApiMsg | ImuApiMsg | ServerDisconnectMsg;
 
 export class Api {
-  ws: WebSocket;
+  waitingOnButton: Observable<boolean>;
+
+  private ws: WebSocket;
+  private sendPhoto: (() => void) | null;
+  private sendPhotoScheduled: boolean;
 
   // can't just use "/ws". WebSocket constructor won't accept it.
   // static WS_URL =
@@ -24,25 +33,57 @@ export class Api {
 
   constructor(ws: WebSocket) {
     this.ws = ws;
+    this.waitingOnButton = new Observable(false as boolean);
+    this.sendPhoto = null;
+    this.sendPhotoScheduled = false;
 
     ws.onmessage = async ({ data }: { data: string }) =>
       this.onMsg(JSON.parse(data) as ApiMsg);
   }
 
   private onMsg(msg: ApiMsg) {
-    const raiseUnhandled = () => {
-      console.error(`Unhandled Api message`, msg);
-      throw new Error(`Unhandled Api message ${msg}`);
-    };
+    console.log("got api msg", msg);
+
+    switch (msg.cmd) {
+      case "grab":
+        if (msg.button) {
+          this.waitingOnButton.set(true);
+        } else {
+          this.scheduleSendPhoto();
+        }
+        break;
+
+      case "imu":
+        this.send(null);
+        break;
+
+      case "disconnect":
+        this.ws.close();
+        throw new Error("Another client device has taken control of websocket");
+
+      default:
+        throw new Error(`Unhandled Api message ${msg}`);
+    }
   }
 
-  private send(msg: any) {
+  send(msg: any) {
     console.log("sending", { msg, readyState: this.ws.readyState });
-    this.ws.send(JSON.stringify(msg));
+    this.ws.send(msg instanceof Blob ? msg : JSON.stringify(msg));
   }
 
-  setCurrentNode(nodeUrl: string) {
-    this.send({ chosenNode: nodeUrl });
+  scheduleSendPhoto() {
+    if (this.sendPhoto === null) {
+      this.sendPhotoScheduled = true;
+    } else {
+      this.sendPhoto();
+    }
+  }
+
+  registerSendPhoto(sendPhoto: () => void) {
+    this.sendPhoto = sendPhoto;
+    if (this.sendPhotoScheduled) {
+      sendPhoto();
+    }
   }
 }
 

@@ -66,7 +66,7 @@ function MainUI({ api }: { api: Api }) {
   useEffect(() => {
     const imuCallback = ({ alpha, beta, gamma }: DeviceOrientationEvent) => {
       // append the data
-      const now = Math.floor(Date.now() / 1000);
+      const now = Date.now() / 1000;
       const data = api.imuData.state;
       data[0].push(now);
       data[1].push(alpha!);
@@ -94,11 +94,12 @@ function MainUI({ api }: { api: Api }) {
     const intervalID = setInterval(() => {
       const [alphas, betas, gammas] = api.imuData.state.slice(1, 4);
 
-      const newAlpha = (alphas[alphas.length - 1] + Math.random() - 0.5) % 360;
+      const newAlpha =
+        (alphas[alphas.length - 1] + (Math.random() - 0.5) * 10) % 360;
       imuCallback({
         alpha: newAlpha < 0 ? 360 - newAlpha : newAlpha,
-        beta: (betas[betas.length - 1] + Math.random() - 0.5) % 180,
-        gamma: (gammas[gammas.length - 1] + Math.random() - 0.5) % 90,
+        beta: (betas[betas.length - 1] + (Math.random() - 0.5) * 10) % 180,
+        gamma: (gammas[gammas.length - 1] + (Math.random() - 0.5) * 10) % 90,
       } as DeviceOrientationEvent);
     }, 100);
 
@@ -142,12 +143,12 @@ function MainUI({ api }: { api: Api }) {
           }}
         >
           {showImuData ? (
-            <div style={{ height: 100, width: "80vw" }}>
+            <div style={{ height: 100, width: "100%", color: "white" }}>
               <SignalScopeChart
                 scope={{
                   name: "Orientation",
                   styles: null,
-                  labels: null,
+                  labels: ["alpha", "beta", "gamma"],
                   data: api.imuData,
                   keepLastSecs: 5,
                 }}

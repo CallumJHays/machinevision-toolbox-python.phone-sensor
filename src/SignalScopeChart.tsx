@@ -51,6 +51,7 @@ export function SignalScopeChart({ scope }: { scope: SignalScope }) {
             ...(scope.labels ?? []).map((label, i) => ({
               label,
               stroke: VEGA_CAT_10_COLORS[i % VEGA_CAT_10_COLORS.length],
+              points: { show: false },
             })),
           ],
 
@@ -59,7 +60,7 @@ export function SignalScopeChart({ scope }: { scope: SignalScope }) {
               stroke: "white",
               labelSize: 0,
               grid: { stroke: "white", width: 0.1 },
-              ticks: { show: false },
+              ticks: { show: false, size: 0 },
               size: 0,
             },
             {

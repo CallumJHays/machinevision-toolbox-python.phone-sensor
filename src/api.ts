@@ -47,6 +47,7 @@ export class Api {
     switch (msg.cmd) {
       case "grab":
         if (msg.button) {
+          console.log("waiting");
           this.waitingOnButton.set(true);
         } else {
           this.scheduleSendPhoto();

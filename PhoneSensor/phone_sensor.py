@@ -19,7 +19,11 @@ class ClientDisconnectException(Exception): ...
 
 class PhoneSensor:
 
-    def __init__(self, qrcode=False, host: str="0.0.0.0", port: int=8765):
+    def __init__(self,
+                 qrcode: bool = False,
+                 host: str = "0.0.0.0",
+                 port: int = 8765):
+
         self._ws: Opt[websockets.WebSocketServerProtocol] = None
         self._in = Queue()
         self._out = Queue()
@@ -30,8 +34,11 @@ class PhoneSensor:
                daemon=True).start()
 
 
-    def grab(self, cam: Literal['front', 'back']=None,
-             button: bool=False, wait: float=None) -> np.ndarray:
+    def grab(self,
+             cam: Literal['front', 'back'] = None,
+             button: bool = False,
+             wait: float = None
+        ) -> np.ndarray:
         
         res = self._rpc(json.dumps({
             'cmd': 'grab',
@@ -46,7 +53,8 @@ class PhoneSensor:
                 .reshape((height, width, 3))
 
 
-    def imu(self, wait: float=None) -> Tuple[float, float, float]:
+    def imu(self, wait: float = None) -> Tuple[float, float, float]:
+
         return tuple(json.loads(self._rpc(json.dumps({
             'cmd': 'imu',
             'wait': wait

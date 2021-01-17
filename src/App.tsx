@@ -12,6 +12,8 @@ function MainUI({ api }: { api: Api }) {
     setWaitingForButton,
   ] = api.waitingOnButton.useState();
 
+  console.log("render", { waitingForButton });
+
   const sendPhoto = useCallback(
     function sendPhoto() {
       const canvas = unwrap(canvasRef.current);

@@ -11,7 +11,8 @@ ReactDOM.render(
     fallbackRender={({ error, resetErrorBoundary }) => (
       <Alert variant="danger">
         Something went wrong:
-        {error}
+        {error.toString()}
+        <br />
         <Alert.Link onClick={resetErrorBoundary}>Try again</Alert.Link>
       </Alert>
     )}

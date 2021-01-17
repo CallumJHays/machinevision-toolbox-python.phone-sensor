@@ -80,6 +80,8 @@ class PhoneSensor:
 
 
     async def _api(self, ws: WebSocketServerProtocol, _path):
+        ip = ws.local_address[0]
+        print(f"New client connected from {ip}")
         # new connection
         if self._ws: # if we already have one, 
             try:
@@ -93,15 +95,19 @@ class PhoneSensor:
                 self._out.put(ClientDisconnectException(
                     "Switched to new client before retrieving result from previous one."))
 
+        firstMsg = json.loads(await ws.recv());
+        assert firstMsg['ready'], f"got unexpected first message from client: {firstMsg}"
+
+
         try:
-            while True:
+            while True: 
                 cmd = self._in.get()
                 await ws.send(cmd)
                 res = await ws.recv()
                 self._out.put(res)
             
         except WebSocketException:
-            self._out.put(ClientDisconnectException("Client disconnected unexpectedly"))
+            self._out.put(ClientDisconnectException("Client from {ip} disconnected"))
 
 
     async def _maybe_serve_static(self, path: str, _headers):

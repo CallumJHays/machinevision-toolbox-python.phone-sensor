@@ -23,33 +23,29 @@ export class Api {
   waitingOnButton: Observable<boolean>;
 
   private ws: WebSocket;
-  private sendPhoto: (() => void) | null;
-  private sendPhotoScheduled: boolean;
+  private getPhoto: () => Blob;
 
   // can't just use "/ws". WebSocket constructor won't accept it.
   // static WS_URL =
   //   "ws://" + document.domain + ":" + window.location.port + "/ws";
   static WS_URL = "ws://" + document.domain + ":8765/ws";
 
-  constructor(ws: WebSocket) {
+  constructor(ws: WebSocket, getPhoto: () => Blob) {
     this.ws = ws;
     this.waitingOnButton = new Observable(false as boolean);
-    this.sendPhoto = null;
-    this.sendPhotoScheduled = false;
+    this.getPhoto = getPhoto;
 
     ws.onmessage = async ({ data }: { data: string }) =>
       this.onMsg(JSON.parse(data) as ApiMsg);
   }
 
   private onMsg(msg: ApiMsg) {
-    console.log("got api msg", msg);
-
     switch (msg.cmd) {
       case "grab":
         if (msg.button) {
           this.waitingOnButton.set(true);
         } else {
-          this.scheduleSendPhoto();
+          this.getPhoto();
         }
         break;
 
@@ -66,40 +62,33 @@ export class Api {
     }
   }
 
-  send(msg: any) {
+  private send(msg: any) {
     console.log("sending", { msg, readyState: this.ws.readyState });
     this.ws.send(msg instanceof Blob ? msg : JSON.stringify(msg));
   }
 
-  scheduleSendPhoto() {
-    if (this.sendPhoto === null) {
-      this.sendPhotoScheduled = true;
-    } else {
-      this.sendPhoto();
-    }
+  ready() {
+    this.send({ ready: true });
   }
 
-  registerSendPhoto(sendPhoto: () => void) {
-    this.sendPhoto = sendPhoto;
-    if (this.sendPhotoScheduled) {
-      sendPhoto();
-    }
+  sendPhoto() {
+    this.send(this.getPhoto());
   }
 }
 
-export function useApi() {
+export function useApi(params: ConstructorParameters<typeof Api>[1]) {
   const [api, setApi] = useState<Api | Error | null>(null);
 
   useEffect(() => {
     try {
       const ws = new WebSocket(Api.WS_URL);
-      ws.onopen = () => setApi(new Api(ws));
+      ws.onopen = () => setApi(new Api(ws, params));
       ws.onclose = () => setApi(null);
       return ws.close; // effect cleanup handler
     } catch (e) {
       setApi(e); // set the connection error to show users
     }
-  }, []);
+  }, [params]);
 
   return api;
 }

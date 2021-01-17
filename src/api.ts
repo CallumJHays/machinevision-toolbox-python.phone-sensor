@@ -22,6 +22,7 @@ type ApiMsg = CameraGrabApiMsg | ImuApiMsg | ServerDisconnectMsg;
 export class Api {
   waitingOnButton: Observable<boolean>;
   sendPhotoFunc: Observable<(() => void) | null>;
+  imuData: Observable<number[][]>;
 
   private ws: WebSocket;
 
@@ -34,6 +35,12 @@ export class Api {
     this.ws = ws;
     this.waitingOnButton = new Observable(false as boolean);
     this.sendPhotoFunc = new Observable(null as any);
+    this.imuData = new Observable([
+      [Math.floor(Date.now() / 1000)],
+      [0],
+      [0],
+      [0],
+    ]);
 
     ws.onmessage = async ({ data }: { data: string }) =>
       this.onMsg(JSON.parse(data) as ApiMsg);
@@ -69,7 +76,6 @@ export class Api {
   }
 
   send(msg: any) {
-    console.log("sending", { msg, readyState: this.ws.readyState });
     this.ws.send(msg instanceof Blob ? msg : JSON.stringify(msg));
   }
 }

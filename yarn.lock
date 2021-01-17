@@ -11252,6 +11252,11 @@
   "resolved" "https://registry.npmjs.org/upath/-/upath-1.2.0.tgz"
   "version" "1.2.0"
 
+"uplot@^1.6.1":
+  "integrity" "sha512-wg6CVWEq9WDHssw3jd0jMmJ7dWSVmfaYazcuad4d3cyiJoTxcSjUEp5Q9TiDzmPhJASjk77orh2+r/6WS9Uz7A=="
+  "resolved" "https://registry.npmjs.org/uplot/-/uplot-1.6.1.tgz"
+  "version" "1.6.1"
+
 "uri-js@^4.2.2":
   "integrity" "sha512-B0yRTzYdUCCn9n+F4+Gh4yIDtMQcaJsmYBDsTSG8g/OejKBodLQ2IHfN3bM7jUsRXndopT7OIXWdYqc1fjmV6g=="
   "resolved" "https://registry.npmjs.org/uri-js/-/uri-js-4.4.0.tgz"

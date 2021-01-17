@@ -19,7 +19,6 @@ export class Observable<T> {
     // this would usually be in the useEffect below, but for compatability with the
     // component lifecycle we need this to be called here
     if (this.callbacks.indexOf(setState) === -1) {
-      console.log("adding new callback");
       this.onChange(setState);
     }
 
@@ -34,7 +33,6 @@ export class Observable<T> {
 
   onChange(cb: Callback<T>) {
     this.callbacks.push(cb);
-    console.log(this.callbacks);
   }
 
   deRegister(cb: Callback<T>) {
@@ -43,7 +41,6 @@ export class Observable<T> {
 
   set(state: T) {
     this.state = state;
-    console.log(this.callbacks);
     for (const cb of this.callbacks) {
       cb(state);
     }

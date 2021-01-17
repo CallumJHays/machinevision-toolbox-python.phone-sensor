@@ -1,8 +1,12 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import Button from "react-bootstrap/Button";
-import { useApi, Api } from "./api";
 import unwrap from "ts-unwrap";
 import "md-gum-polyfill"; // work on more browsers
+
+import { useApi, Api } from "./api";
+import { SignalScopeChart } from "./SignalScopeChart";
+
+const KEEP_LAST_SECS_IMU_DATA = 5;
 
 function MainUI({ api }: { api: Api }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -11,8 +15,7 @@ function MainUI({ api }: { api: Api }) {
     waitingForButton,
     setWaitingForButton,
   ] = api.waitingOnButton.useState();
-
-  console.log("render", { waitingForButton });
+  const [showImuData, setShowImuData] = useState(true);
 
   const sendPhoto = useCallback(
     function sendPhoto() {
@@ -60,6 +63,48 @@ function MainUI({ api }: { api: Api }) {
     // don't bother with cleanup for now
   }, [api, sendPhoto]);
 
+  useEffect(() => {
+    const imuCallback = ({ alpha, beta, gamma }: DeviceOrientationEvent) => {
+      // append the data
+      const now = Math.floor(Date.now() / 1000);
+      const data = api.imuData.state;
+      data[0].push(now);
+      data[1].push(alpha!);
+      data[2].push(beta!);
+      data[3].push(gamma!);
+
+      // only keep scope.keepLastSecs worth of data
+      const [time] = data;
+      const cutoffTime = now - KEEP_LAST_SECS_IMU_DATA;
+      const cutoffIdx = time.findIndex((t) => t >= cutoffTime);
+      if (cutoffIdx > 0) {
+        for (const series of data) {
+          series.splice(0, cutoffIdx);
+        }
+      }
+
+      // update the observable
+      api.imuData.set(data.slice());
+    };
+
+    // window.addEventListener("deviceorientation", imuCallback);
+    // return () => window.removeEventListener("deviceorientation", imuCallback);
+
+    // random data for testing on dev laptop
+    const intervalID = setInterval(() => {
+      const [alphas, betas, gammas] = api.imuData.state.slice(1, 4);
+
+      const newAlpha = (alphas[alphas.length - 1] + Math.random() - 0.5) % 360;
+      imuCallback({
+        alpha: newAlpha < 0 ? 360 - newAlpha : newAlpha,
+        beta: (betas[betas.length - 1] + Math.random() - 0.5) % 180,
+        gamma: (gammas[gammas.length - 1] + Math.random() - 0.5) % 90,
+      } as DeviceOrientationEvent);
+    }, 100);
+
+    return () => clearInterval(intervalID);
+  }, [api.imuData]);
+
   return (
     <div
       style={{
@@ -88,19 +133,41 @@ function MainUI({ api }: { api: Api }) {
           width: "100%",
         }}
       >
-        <Button
-          variant="outline-light"
+        <div
           style={{
-            borderRadius: 99,
-            height: 60,
-            width: 60,
-            fontSize: 32,
-            alignSelf: "flex-end",
-            margin: 10,
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "start",
+            margin: 20,
           }}
         >
-          ⋯
-        </Button>
+          {showImuData ? (
+            <div style={{ height: 100, width: "80vw" }}>
+              <SignalScopeChart
+                scope={{
+                  name: "Orientation",
+                  styles: null,
+                  labels: null,
+                  data: api.imuData,
+                  keepLastSecs: 5,
+                }}
+              />
+            </div>
+          ) : null}
+
+          <Button
+            variant="outline-light"
+            style={{
+              borderRadius: 99,
+              height: 60,
+              width: 60,
+              fontSize: 32,
+              margin: 10,
+            }}
+          >
+            ⋯
+          </Button>
+        </div>
 
         {waitingForButton ? (
           <Button

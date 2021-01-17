@@ -72,7 +72,7 @@ function MainUI({ api }: { api: Api }) {
       <video
         ref={videoRef}
         autoPlay
-        style={{ maxWidth: "100%", maxHeight: "100%" }}
+        style={{ maxWidth: "100%", maxHeight: "100%", margin: "0 auto" }}
       />
       {/* canvas required for screenshot (MediaStreamCapture API not available in most mobile browsers) */}
       <canvas ref={canvasRef} style={{ display: "none" }} />
@@ -89,7 +89,7 @@ function MainUI({ api }: { api: Api }) {
         }}
       >
         <Button
-          variant="outline-primary"
+          variant="outline-light"
           style={{
             borderRadius: 99,
             height: 60,
@@ -104,7 +104,7 @@ function MainUI({ api }: { api: Api }) {
 
         {waitingForButton ? (
           <Button
-            variant="outline-primary"
+            variant="outline-light"
             style={{
               borderRadius: 99,
               height: 90,

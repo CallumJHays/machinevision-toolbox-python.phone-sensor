@@ -91,7 +91,7 @@ class PhoneSensor:
         ip = ws.local_address[0]
         print(f"New client connected from {ip}")
         # new connection
-        if self._ws: # if we already have one, 
+        if self._ws: # if we already have one,
             try:
                 await self._ws.send(json.dumps({
                     'cmd': 'disconnect'
@@ -102,6 +102,8 @@ class PhoneSensor:
             if self._waiting:
                 self._out.put(ClientDisconnectException(
                     "Switched to new client before retrieving result from previous one."))
+
+        self._ws = ws
 
         try:
             while True: 

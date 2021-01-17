@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Observable } from "./observable";
-import unwrap from "ts-unwrap";
 
 type CameraGrabApiMsg = {
   cmd: "grab";

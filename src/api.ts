@@ -29,7 +29,7 @@ export class Api {
   // can't just use "/ws". WebSocket constructor won't accept it.
   // static WS_URL =
   //   "ws://" + document.domain + ":" + window.location.port + "/ws";
-  static WS_URL = "ws://" + document.domain + ":8765/ws";
+  static WS_URL = "ws://localhost:8765/ws";
 
   constructor(ws: WebSocket) {
     this.ws = ws;
@@ -82,15 +82,14 @@ export class Api {
 
 export function useApi() {
   // params: ConstructorParameters<typeof Api> ) {
-  const [api, setApi] = useState<Api | null>(null);
+  const [api, setApi] = useState<Api | null | Error>(null);
 
   useEffect(() => {
     const ws = new WebSocket(Api.WS_URL);
     ws.onopen = () => setApi(new Api(ws)); //, params));
     ws.onclose = () => setApi(null);
-    ws.onerror = (e) => {
-      throw e;
-    };
+    ws.onerror = (e) =>
+      setApi(new Error(`couldn't connect to ws api @ ${Api.WS_URL}`));
     return ws.close; // effect cleanup handler
   }, []); //[params]);
 

@@ -203,5 +203,9 @@ function MainUI({ api }: { api: Api }) {
 export default function App() {
   const api = useApi();
 
+  if (api instanceof Error) {
+    throw api; // get handle'd by error boundary in index.tsx
+  }
+
   return api ? <MainUI api={api} /> : null;
 }

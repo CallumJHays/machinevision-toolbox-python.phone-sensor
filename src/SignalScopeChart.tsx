@@ -62,6 +62,7 @@ export function SignalScopeChart({ scope }: { scope: SignalScope }) {
               grid: { stroke: "white", width: 0.1 },
               ticks: { show: false, size: 0 },
               size: 0,
+              values: "",
             },
             {
               stroke: "white",

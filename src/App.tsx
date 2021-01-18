@@ -143,7 +143,15 @@ function MainUI({ api }: { api: Api }) {
           }}
         >
           {showImuData ? (
-            <div style={{ height: 100, width: "100%", color: "white" }}>
+            <div
+              style={{
+                height: 100,
+                width: "100%",
+                color: "white",
+                background: "#282c34",
+                borderRadius: 5,
+              }}
+            >
               <SignalScopeChart
                 scope={{
                   name: "Orientation",

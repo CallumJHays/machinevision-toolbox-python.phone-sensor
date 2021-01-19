@@ -1,7 +1,9 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import Button from "react-bootstrap/Button";
+import Modal from "react-bootstrap/Modal";
+import Switch from "react-switch";
 import unwrap from "ts-unwrap";
-import "md-gum-polyfill"; // work on more browsers
+import "md-gum-polyfill"; // get videostream working on more browsers
 
 import { useApi, Api } from "./api";
 import { SignalScopeChart } from "./SignalScopeChart";
@@ -16,6 +18,7 @@ function MainUI({ api }: { api: Api }) {
     setWaitingForButton,
   ] = api.waitingOnButton.useState();
   const [showImuData, setShowImuData] = useState(true);
+  const [showMenu, setShowMenu] = useState(false);
 
   const sendPhoto = useCallback(
     function sendPhoto() {
@@ -173,9 +176,35 @@ function MainUI({ api }: { api: Api }) {
               fontSize: 32,
               margin: 10,
             }}
+            onClick={() => setShowMenu(true)}
           >
             ⋯
           </Button>
+
+          <Modal show={showMenu} onHide={() => setShowMenu(false)} size="lg">
+            <Modal.Header closeButton>
+              <Modal.Title>Menu</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  fontSize: "1rem",
+                }}
+              >
+                Show IMU Data?
+                <Switch
+                  onChange={setShowImuData}
+                  checked={showImuData}
+                  height={30}
+                  width={60}
+                />
+              </label>
+            </Modal.Body>
+          </Modal>
         </div>
 
         {waitingForButton ? (

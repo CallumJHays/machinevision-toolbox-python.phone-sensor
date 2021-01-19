@@ -24,7 +24,6 @@ export class Observable<T> {
 
     // eslint-disable-next-line
     useEffect(() => {
-      this.onChange(setState);
       return () => this.deRegister(setState);
     }, []);
 

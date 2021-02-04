@@ -28,8 +28,8 @@ export class Api {
 
   // can't just use "/ws". WebSocket constructor won't accept it.
   // static WS_URL =
-  //   "ws://" + document.domain + ":" + window.location.port + "/ws";
-  static WS_URL = "ws://localhost:8765/ws";
+  //   "wss://" + document.domain + ":" + window.location.port + "/ws";
+  static WS_URL = "wss://192.168.0.239:8765/ws";
 
   constructor(ws: WebSocket) {
     this.ws = ws;

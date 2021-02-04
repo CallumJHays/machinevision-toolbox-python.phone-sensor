@@ -1,6 +1,8 @@
 import asyncio
 from http import HTTPStatus
+from http.client import HTTPResponse
 from pathlib import Path
+from urllib.request import urlopen
 import tempfile
 from typing import Any, Optional as Opt, Tuple, Union
 from typing_extensions import Literal
@@ -13,13 +15,13 @@ import ssl
 import subprocess
 import random
 
-
 import websockets
 from websockets.exceptions import WebSocketException
 from websockets.http import Headers
 from websockets.server import WebSocketServerProtocol
 import numpy as np # type: ignore
 
+DEV_MODE = False # whether to expect webpack to be running or not
 
 class ClientDisconnectException(Exception): ...
 
@@ -144,10 +146,20 @@ class PhoneSensor:
         if path != '/ws':
             if path == '/':
                 path = '/index.html'
-            file = Path(__file__).parent / '..' / ('build' + path)
-            return (HTTPStatus.OK, {
-                'Content-Type': _extensions_map[file.suffix]
-            }, file.read_bytes())
+            
+            if DEV_MODE:
+                res: HTTPResponse = urlopen('http://localhost:3000' + path)
+                return (HTTPStatus.OK, {
+                    'Content-Type': res.headers.get('Content-Type')
+                }, res.read())
+            
+
+            else:
+                file = Path(__file__).parent / '..' / ('build' + path)
+                return (HTTPStatus.OK, {
+                    'Content-Type': _extensions_map[file.suffix]
+                }, file.read_bytes())
+            
 
         # if None is returned, will default to ws handler
         return None

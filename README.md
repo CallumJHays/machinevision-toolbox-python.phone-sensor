@@ -14,7 +14,7 @@ npm start
 And in a separate terminal:
 
 ```bash
-python test_phone_sensor.py
+python demo_phone_sensor.py
 ```
 
-Then test the app at http://localhost:8765
+Then test the app at https://localhost:8765

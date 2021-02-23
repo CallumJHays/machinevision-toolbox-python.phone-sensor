@@ -4,7 +4,9 @@ from matplotlib import pyplot as plt
 from PhoneSensor import PhoneSensor
 
 # proxy from the dev server
-phone = PhoneSensor(proxy_client_from='http://localhost:3000')
+phone = PhoneSensor(
+    proxy_client_from='http://localhost:3000',
+    qrcode=True)
 
 while True:
     try:

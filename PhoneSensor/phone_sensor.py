@@ -12,6 +12,7 @@ from threading import Thread
 from queue import Queue
 import ssl
 import subprocess
+import pyqrcode # type: ignore
 
 import websockets
 from websockets.exceptions import WebSocketException
@@ -25,14 +26,15 @@ class PhoneSensor:
 
     def __init__(self,
                  qrcode: bool = False,
+                 proxy_client_from: Opt[str] = None,
                  host: str = "0.0.0.0",
-                 port: int = 8765,
-                 proxy_client_from: Opt[str] = None):
+                 port: int = 8765):
 
         self._ws: Opt[websockets.WebSocketServerProtocol] = None
         self._in: Queue[str] = Queue()
         self._out: Queue[Union[websockets.Data, ClientDisconnectException]] = Queue()
         self._waiting = False
+        self._qrcode = qrcode
         self._proxy_client_from = proxy_client_from
 
         Thread(target=self._start_server,
@@ -87,13 +89,23 @@ class PhoneSensor:
             ssl=use_selfsigned_ssl_cert(), 
             max_size=100_000_000, # allow for big images to be sent (<100MB)
             process_request=self._maybe_serve_static, loop=loop)
+        
+        url = f"https://{_get_local_ip()}:{port}"
 
+        # display cmdline connect msg
         BLUE = '\033[94m'
         YELLOW = '\033[93m'
         UNDERLINE = '\033[4m'
         END = '\033[0m'
-        print(f"{YELLOW}Hosting 📷 app at 🌐 {END}{BLUE}{UNDERLINE}https://{_get_local_ip()}:{port}{END}{END}")
-        
+        print(f"{YELLOW}Hosting 📷 app at 🌐 {END}{BLUE}{UNDERLINE}{url}{END}{END}")
+
+        # cmdline qr code if specified
+        if self._qrcode:
+            # use url.upper() as it's needed for alphanumeric encoding:
+            # https://pythonhosted.org/PyQRCode/encoding.html#alphanumeric
+            qrcode = pyqrcode.create(url.upper()).terminal() # type: ignore
+            print(f'Or scan the following QR Code: {qrcode}')
+
         loop.run_until_complete(server)
         loop.run_forever()
 
@@ -124,7 +136,7 @@ class PhoneSensor:
                 self._out.put(res)
             
         except WebSocketException:
-            self._out.put(ClientDisconnectException("Client from {ip} disconnected"))
+            self._out.put(ClientDisconnectException(f"Client from {ip} disconnected"))
 
 
     async def _maybe_serve_static(self, path: str, _headers: Headers):

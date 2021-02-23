@@ -9096,6 +9096,11 @@
   "resolved" "https://registry.npmjs.org/qs/-/qs-6.7.0.tgz"
   "version" "6.7.0"
 
+"quaternion@^1.1.0":
+  "integrity" "sha512-mLTtnzuMtUzguemuvsxD+KPS4F05H1Bw/4cNsQQvzfvPEGvkmWLRoAKsHT0V9go4X4hOU3LCtuxqWXQi3JN+SA=="
+  "resolved" "https://registry.npmjs.org/quaternion/-/quaternion-1.1.0.tgz"
+  "version" "1.1.0"
+
 "query-string@^4.1.0":
   "integrity" "sha1-u7aTucqRXCMlFbIosaArYJBD2+s="
   "resolved" "https://registry.npmjs.org/query-string/-/query-string-4.3.4.tgz"

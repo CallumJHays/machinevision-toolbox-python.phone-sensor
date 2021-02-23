@@ -3,7 +3,8 @@ from PhoneSensor import PhoneSensor
 from matplotlib import pyplot as plt
 from PhoneSensor import PhoneSensor
 
-phone = PhoneSensor()
+# proxy from the dev server
+phone = PhoneSensor(proxy_client_from='http://localhost:3000')
 
 while True:
     try:

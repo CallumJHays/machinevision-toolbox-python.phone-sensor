@@ -3,7 +3,6 @@ from http import HTTPStatus
 from http.client import HTTPResponse
 from pathlib import Path
 from urllib.request import urlopen
-import tempfile
 from typing import Any, Optional as Opt, Tuple, Union
 from typing_extensions import Literal
 import json
@@ -13,15 +12,12 @@ from threading import Thread
 from queue import Queue
 import ssl
 import subprocess
-import random
 
 import websockets
 from websockets.exceptions import WebSocketException
 from websockets.http import Headers
 from websockets.server import WebSocketServerProtocol
 import numpy as np # type: ignore
-
-DEV_MODE = False # whether to expect webpack to be running or not
 
 class ClientDisconnectException(Exception): ...
 
@@ -30,12 +26,14 @@ class PhoneSensor:
     def __init__(self,
                  qrcode: bool = False,
                  host: str = "0.0.0.0",
-                 port: int = 8765):
+                 port: int = 8765,
+                 proxy_client_from: Opt[str] = None):
 
         self._ws: Opt[websockets.WebSocketServerProtocol] = None
         self._in: Queue[str] = Queue()
         self._out: Queue[Union[websockets.Data, ClientDisconnectException]] = Queue()
         self._waiting = False
+        self._proxy_client_from = proxy_client_from
 
         Thread(target=self._start_server,
                kwargs={'host': host, 'port': port},
@@ -86,7 +84,7 @@ class PhoneSensor:
         server = websockets.serve(self._api, host, port,
             # just generate a new certificate every time.
             # Hopefully this doesnt drain too much entropy
-            ssl=gen_selfsigned_ssl_cert(), 
+            ssl=use_selfsigned_ssl_cert(), 
             max_size=100_000_000, # allow for big images to be sent (<100MB)
             process_request=self._maybe_serve_static, loop=loop)
 
@@ -147,8 +145,8 @@ class PhoneSensor:
             if path == '/':
                 path = '/index.html'
             
-            if DEV_MODE:
-                res: HTTPResponse = urlopen('http://localhost:3000' + path)
+            if self._proxy_client_from:
+                res: HTTPResponse = urlopen(self._proxy_client_from + path)
                 return (HTTPStatus.OK, {
                     'Content-Type': res.headers.get('Content-Type')
                 }, res.read())
@@ -166,25 +164,35 @@ class PhoneSensor:
 
 
 # Ripped from https://docs.python.org/3/library/ssl.html#self-signed-certificates
-def gen_selfsigned_ssl_cert():
-    certfile = '%s/%s.pem' % (tempfile.gettempdir(), hex(random.getrandbits(128)))
+def use_selfsigned_ssl_cert():
+    certfile = Path(__file__).parent / '.self-signed-cert.pem'
 
-    subprocess.check_call(
-        'openssl req -new -x509 -days 365 -nodes \
-            -out {0} \
-            -keyout {0} \
-            -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=www.example.ro"'\
-                .format(certfile), shell=True, stderr=subprocess.DEVNULL)
-    ssl_context: Any = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER) # type: ignore
-    ssl_context.load_cert_chain(certfile) # type: ignore
+    if not certfile.exists():
+        subprocess.check_call(
+            'openssl req -new -x509 -days 365 -nodes \
+                -out {0} \
+                -keyout {0} \
+                -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=www.example.ro"'\
+                    .format(certfile), shell=True, stderr=subprocess.DEVNULL)
 
     # keyfile not needed
     # with NamedTemporaryFile('r') as key_file:
-    #     cert_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("utf-8"))
+    #     key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("utf-8"))
+
+    ssl_context: Any = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER) # type: ignore
+    ssl_context.load_cert_chain(certfile) # type: ignore
 
     return ssl_context
 
 def _get_local_ip():
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
+    try:
+        # unreadable garbage but it works - https://stackoverflow.com/a/1267524/1266662
+        return (([
+            ip for ip in socket.gethostbyname_ex(socket.gethostname())[2]
+            if not ip.startswith("127.")
+        ] or [[
+            (s.connect(("8.8.8.8", 53)), s.getsockname()[0], s.close())
+            for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]
+        ][0][1]]) + ["no IP found"])[0]
+    except OSError:
+        return 'localhost' # probably not connected to a LAN

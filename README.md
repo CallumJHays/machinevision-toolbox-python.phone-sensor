@@ -17,4 +17,4 @@ And in a separate terminal:
 python test_phone_sensor.py
 ```
 
-Then test the app at http://localhost:3000
+Then test the app at http://localhost:8765

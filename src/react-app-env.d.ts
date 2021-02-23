@@ -6,3 +6,14 @@ declare class ResizeObserver {
 
   observe(el: HTMLElement): void;
 }
+
+declare module "quaternion" {
+  export = class Quaternion {
+    static fromEuler(
+      alpha: float,
+      beta: float,
+      gamma: float,
+      order: str = "ZXY"
+    ): Quaternion;
+  };
+}

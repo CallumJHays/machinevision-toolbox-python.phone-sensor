@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import Button from "react-bootstrap/Button";
 import Modal from "react-bootstrap/Modal";
 import Switch from "react-switch";
+import Quaternion from "quaternion";
 import unwrap from "ts-unwrap";
 import "md-gum-polyfill"; // get videostream working on more browsers
 
@@ -86,28 +87,26 @@ function MainUI({ api }: { api: Api }) {
         }
       }
 
+      // Update the rotation object
+      const RAD = Math.PI / 180;
+      const quaternion = Quaternion.fromEuler(
+        unwrap(alpha) * RAD,
+        unwrap(beta) * RAD,
+        unwrap(gamma) * RAD
+      );
+
+      // [OPTIONAL IMPROVEMENT]: Display orientation via a rotating mobile phone image
+      // Set the CSS style to the element you want to rotate
+      // elm.style.transform = "matrix3d(" + q.conjugate().toMatrix4() + ")";
+
       // update the observable
       api.imuData.set(data.slice());
+      api.imuQuaternion.set(quaternion);
     };
 
-    // window.addEventListener("deviceorientation", imuCallback);
-    // return () => window.removeEventListener("deviceorientation", imuCallback);
-
-    // random data for testing on dev laptop
-    const intervalID = setInterval(() => {
-      const [alphas, betas, gammas] = api.imuData.state.slice(1, 4);
-
-      const newAlpha =
-        (alphas[alphas.length - 1] + (Math.random() - 0.5) * 10) % 360;
-      imuCallback({
-        alpha: newAlpha < 0 ? 360 - newAlpha : newAlpha,
-        beta: (betas[betas.length - 1] + (Math.random() - 0.5) * 10) % 180,
-        gamma: (gammas[gammas.length - 1] + (Math.random() - 0.5) * 10) % 90,
-      } as DeviceOrientationEvent);
-    }, 100);
-
-    return () => clearInterval(intervalID);
-  }, [api.imuData]);
+    window.addEventListener("deviceorientation", imuCallback);
+    return () => window.removeEventListener("deviceorientation", imuCallback);
+  }, [api.imuData, api.imuQuaternion]);
 
   return (
     <div
@@ -164,6 +163,11 @@ function MainUI({ api }: { api: Api }) {
                   keepLastSecs: 5,
                 }}
               />
+              {/* Has some graphical bugs. Leaving here incase it wants to be developed in the future */}
+              {/* <SignalBarChart
+                data={api.imuData}
+                labels={["alpha", "beta", "gamma"]}
+              /> */}
             </div>
           ) : null}
 

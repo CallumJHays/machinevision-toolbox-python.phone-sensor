@@ -1,3 +1,4 @@
+import Quaternion from "quaternion";
 import { useState, useEffect } from "react";
 import { Observable } from "./observable";
 
@@ -23,6 +24,7 @@ export class Api {
   waitingOnButton: Observable<boolean>;
   sendPhotoFunc: Observable<(() => void) | null>;
   imuData: Observable<number[][]>;
+  imuQuaternion: Observable<Quaternion | null>;
 
   private ws: WebSocket;
 
@@ -40,6 +42,7 @@ export class Api {
       [0],
       [0],
     ]);
+    this.imuQuaternion = new Observable(null as any);
 
     ws.onmessage = async ({ data }: { data: string }) =>
       this.onMsg(JSON.parse(data) as ApiMsg);
@@ -62,7 +65,7 @@ export class Api {
         break;
 
       case "imu":
-        this.send(null);
+        this.send(this.imuQuaternion.state);
         break;
 
       case "disconnect":

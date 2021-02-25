@@ -18,7 +18,7 @@ function MainUI({ api }: { api: Api }) {
     waitingForButton,
     setWaitingForButton,
   ] = api.waitingOnButton.useState();
-  const [showImuData, setShowImuData] = useState(true);
+  const [showImuData, setShowImuData] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   const sendPhoto = useCallback(
@@ -68,10 +68,58 @@ function MainUI({ api }: { api: Api }) {
   }, [api, sendPhoto]);
 
   useEffect(() => {
-    const imuCallback = ({ alpha, beta, gamma }: DeviceOrientationEvent) => {
+    (async function setupSensors() {
+      try {
+        const sensors = {
+          accelerometer: Accelerometer,
+          gyroscope: Gyroscope,
+          magnetometer: Magnetometer,
+        };
+
+        for (const [name, SensorClass] of Object.entries(sensors)) {
+          // if the device supports this sensor type
+          if (typeof SensorClass == "function") {
+            await navigator.permissions.query({ name: name as PermissionName });
+
+            const sensor = new SensorClass({ frequency: 30 });
+
+            sensor.addEventListener("error", (event) => {
+              // Handle runtime errors.
+              if (event.error.name === "NotAllowedError") {
+                // Branch to code for requesting permission.
+              } else if (event.error.name === "NotReadableError") {
+                console.error("Cannot connect to the sensor.");
+              } else {
+                api.imuDataFrame.set({
+                  ...api.imuDataFrame.state,
+                  [name]: [sensor.x, sensor.y, sensor.z],
+                });
+              }
+            });
+            sensor.addEventListener("reading", () => {});
+            sensor.start();
+          }
+        }
+      } catch (error) {
+        if (error.name === "SecurityError") {
+          // See the note above about feature policy.
+          console.error("Sensor construction was blocked by a feature policy.");
+        } else if (error.name === "ReferenceError") {
+          console.error("Sensor is not supported by the User Agent.");
+        } else {
+          throw error;
+        }
+      }
+    })();
+
+    const onDeviceOrientation = ({
+      alpha,
+      beta,
+      gamma,
+    }: DeviceOrientationEvent) => {
       // append the data
       const now = Date.now() / 1000;
-      const data = api.imuData.state;
+      const data = api.imuQuaternionData.state;
       data[0].push(now);
       data[1].push(alpha!);
       data[2].push(beta!);
@@ -89,7 +137,7 @@ function MainUI({ api }: { api: Api }) {
 
       // Update the rotation object
       const RAD = Math.PI / 180;
-      const quaternion = Quaternion.fromEuler(
+      const q = Quaternion.fromEuler(
         unwrap(alpha) * RAD,
         unwrap(beta) * RAD,
         unwrap(gamma) * RAD
@@ -100,13 +148,18 @@ function MainUI({ api }: { api: Api }) {
       // elm.style.transform = "matrix3d(" + q.conjugate().toMatrix4() + ")";
 
       // update the observable
-      api.imuData.set(data.slice());
-      api.imuQuaternion.set(quaternion);
+      api.imuQuaternionData.set(data.slice());
+      api.imuDataFrame.set({
+        ...api.imuDataFrame.state,
+        quaternion: [q.x, q.y, q.z, q.w],
+      });
+      // api.imuDataFrame.set(quaternion);
     };
 
-    window.addEventListener("deviceorientation", imuCallback);
-    return () => window.removeEventListener("deviceorientation", imuCallback);
-  }, [api.imuData, api.imuQuaternion]);
+    window.addEventListener("deviceorientation", onDeviceOrientation);
+    return () =>
+      window.removeEventListener("deviceorientation", onDeviceOrientation);
+  }, [api.imuQuaternionData, api.imuDataFrame]);
 
   return (
     <div
@@ -159,13 +212,13 @@ function MainUI({ api }: { api: Api }) {
                   name: "Orientation",
                   styles: null,
                   labels: ["alpha", "beta", "gamma"],
-                  data: api.imuData,
+                  data: api.imuQuaternionData,
                   keepLastSecs: 5,
                 }}
               />
               {/* Has some graphical bugs. Leaving here incase it wants to be developed in the future */}
               {/* <SignalBarChart
-                data={api.imuData}
+                data={api.imuQuaternionData}
                 labels={["alpha", "beta", "gamma"]}
               /> */}
             </div>

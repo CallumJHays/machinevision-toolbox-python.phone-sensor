@@ -1,17 +1,24 @@
-from PhoneSensor.phone_sensor import ClientDisconnectException
-from PhoneSensor import PhoneSensor
+from phone_sensor import PhoneSensor
 from matplotlib import pyplot as plt
-from PhoneSensor import PhoneSensor
 
 # proxy from the dev server
 phone = PhoneSensor(
-    proxy_client_from='http://localhost:3000',
+    proxy_client_from='localhost:3000',
     qrcode=True)
 
 while True:
     try:
         img = phone.grab(button=True)
+
+        imudata = phone.imu()
+        if imudata.accelerometer:
+            plt.bar(imudata.accelerometer.__dataclass_fields__, imu.accelerometer) # type: ignore
+            plt.show(block=False)
+        else:
+            print('No accelerometer data found')
+
         plt.imshow(img) # type: ignore
         plt.show()
-    except ClientDisconnectException:
+
+    except PhoneSensor.ClientDisconnect:
         pass

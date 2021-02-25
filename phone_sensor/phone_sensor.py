@@ -3,7 +3,7 @@ from http import HTTPStatus
 from http.client import HTTPResponse
 from pathlib import Path
 from urllib.request import urlopen
-from typing import Any, Optional as Opt, Tuple, Union
+from typing import Any, Optional as Opt, NamedTuple, Union
 from typing_extensions import Literal
 import json
 import socket
@@ -15,24 +15,51 @@ import subprocess
 import pyqrcode # type: ignore
 
 import websockets
+# from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import WebSocketException
 from websockets.http import Headers
 from websockets.server import WebSocketServerProtocol
 import numpy as np # type: ignore
 
-class ClientDisconnectException(Exception): ...
+class ImuDataFrame:
+    class XyzTuple(NamedTuple):
+        x: float
+        y: float
+        z: float
+    
+    class Quaternion(NamedTuple):
+        x: float
+        y: float
+        z: float
+        w: float
+
+    accelerometer: Opt[XyzTuple]
+    gyroscope: Opt[XyzTuple]
+    magnetometer: Opt[XyzTuple]
+    quaternion: Quaternion
+
+
+class ClientDisconnect(Exception):
+    pass
+
+class DataUnavailable(Exception):
+    pass
 
 class PhoneSensor:
+
+    ClientDisconnect = ClientDisconnect
+    DataUnavailable = DataUnavailable
+    ImuDataFrame = ImuDataFrame
 
     def __init__(self,
                  qrcode: bool = False,
                  proxy_client_from: Opt[str] = None,
                  host: str = "0.0.0.0",
-                 port: int = 8765):
+                 port: int = 8000):
 
         self._ws: Opt[websockets.WebSocketServerProtocol] = None
         self._in: Queue[str] = Queue()
-        self._out: Queue[Union[websockets.Data, ClientDisconnectException]] = Queue()
+        self._out: Queue[Union[websockets.Data, ClientDisconnect]] = Queue()
         self._waiting = False
         self._qrcode = qrcode
         self._proxy_client_from = proxy_client_from
@@ -58,17 +85,30 @@ class PhoneSensor:
         assert isinstance(res, bytes)
         width, height = struct.unpack('<HH', res[:4])
         
-        
         return np.frombuffer(res[4:], dtype=np.uint8).reshape((height, width, 3)) # type: ignore
                 
 
 
-    def imu(self, wait: Opt[float] = None) -> Tuple[float, float, float]:
-
-        return tuple(json.loads(self._rpc(json.dumps({
+    def imu(self, wait: Opt[float] = None) -> ImuDataFrame:
+        resp = json.loads(self._rpc(json.dumps({
             'cmd': 'imu',
             'wait': wait
-        }))))
+        })))
+        print('got resp', resp)
+
+        if 'error' in resp:
+            raise DataUnavailable(resp['error'])
+
+        frame = ImuDataFrame()
+        frame.accelerometer = ImuDataFrame.XyzTuple(*resp['accelerometer']) \
+            if 'accelerometer' in resp else None
+        frame.gyroscope = ImuDataFrame.XyzTuple(*resp['gyroscope']) \
+            if 'gyroscope' in resp else None
+        frame.magnetometer = ImuDataFrame.XyzTuple(*resp['magnetometer']) \
+            if 'magnetometer' in resp else None
+        frame.quaternion = ImuDataFrame.Quaternion(*resp['quaternion'])
+        
+        return frame
 
     
     def _rpc(self, cmd: str):
@@ -76,19 +116,19 @@ class PhoneSensor:
         self._in.put(cmd)
         res = self._out.get()
         self._waiting = False
-        if isinstance(res, ClientDisconnectException):
+        if isinstance(res, ClientDisconnect):
             raise res
         return res
 
 
     def _start_server(self, host: str, port: int):
-        loop = asyncio.new_event_loop()
+        self.loop = asyncio.new_event_loop()
         server = websockets.serve(self._api, host, port,
             # just generate a new certificate every time.
             # Hopefully this doesnt drain too much entropy
             ssl=use_selfsigned_ssl_cert(), 
             max_size=100_000_000, # allow for big images to be sent (<100MB)
-            process_request=self._maybe_serve_static, loop=loop)
+            process_request=self._maybe_serve_static, loop=self.loop)
         
         url = f"https://{_get_local_ip()}:{port}"
 
@@ -106,15 +146,25 @@ class PhoneSensor:
             qrcode = pyqrcode.create(url.upper()).terminal() # type: ignore
             print(f'Or scan the following QR Code: {qrcode}')
 
-        loop.run_until_complete(server)
-        loop.run_forever()
+        self.loop.run_until_complete(server)
+        self.loop.run_forever()
 
 
-    async def _api(self, ws: WebSocketServerProtocol, _path: str):
+    async def _api(self, ws: WebSocketServerProtocol, path: str):
         ip = ws.local_address[0]
         print(f"New client connected from {ip}")
+
+        # # handle webpack reload ws proxy
+        # if path == '/sockjs-node' and self._proxy_client_from:
+        #     # import pdb; pdb.set_trace()
+        #     await self._ws_proxy(
+        #         await websockets.connect('ws://' + self._proxy_client_from + path, loop=self.loop),
+        #         ws)
+        #     return
+
         # new connection
         if self._ws: # if we already have one,
+
             try:
                 await self._ws.send(json.dumps({
                     'cmd': 'disconnect'
@@ -123,7 +173,7 @@ class PhoneSensor:
                 pass
 
             if self._waiting:
-                self._out.put(ClientDisconnectException(
+                self._out.put(ClientDisconnect(
                     "Switched to new client before retrieving result from previous one."))
 
         self._ws = ws
@@ -136,8 +186,25 @@ class PhoneSensor:
                 self._out.put(res)
             
         except WebSocketException:
-            self._out.put(ClientDisconnectException(f"Client from {ip} disconnected"))
+            self._out.put(ClientDisconnect(f"Client from {ip} disconnected"))
 
+
+    #  Doesn't work :(
+    # async def _ws_proxy(self, from_: WebSocketClientProtocol, to: WebSocketServerProtocol):
+    #     while True:
+    #         upstream, downstream = asyncio.ensure_future(from_.recv()), asyncio.ensure_future(to.recv())
+
+    #         # AssertionError: yield from wasn't used with future
+    #         # Task exception was never retrieved
+    #         done, _ = asyncio.wait(
+    #             { upstream, downstream },
+    #             return_when=asyncio.FIRST_COMPLETED)
+            
+    #         if upstream in done:
+    #             await to.send(await upstream)
+            
+    #         if downstream in done:
+    #             await from_.send(await downstream)
 
     async def _maybe_serve_static(self, path: str, _headers: Headers):
 
@@ -145,7 +212,7 @@ class PhoneSensor:
         _extensions_map = {
             '.manifest': 'text/cache-manifest',
             '.html': 'text/html',
-                '.png': 'image/png',
+            '.png': 'image/png',
             '.jpg': 'image/jpg',
             '.svg':	'image/svg+xml',
             '.css':	'text/css',
@@ -153,16 +220,20 @@ class PhoneSensor:
             '': 'application/octet-stream', # Default
         }
 
-        if path != '/ws':
+        if path == '/sockjs-node':
+            return HTTPStatus.NOT_FOUND, {}, b''
+
+        if path != '/ws': # and path != '/sockjs-node':
             if path == '/':
                 path = '/index.html'
             
             if self._proxy_client_from:
-                res: HTTPResponse = urlopen(self._proxy_client_from + path)
+                print('proxying client from http://' + self._proxy_client_from + path)
+                res: HTTPResponse = urlopen('http://' + self._proxy_client_from + path)
                 return (HTTPStatus.OK, {
                     'Content-Type': res.headers.get('Content-Type')
                 }, res.read())
-            
+
 
             else:
                 file = Path(__file__).parent / '..' / ('build' + path)

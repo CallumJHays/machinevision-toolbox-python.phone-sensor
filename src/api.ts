@@ -1,4 +1,3 @@
-import Quaternion from "quaternion";
 import { useState, useEffect } from "react";
 import { Observable } from "./observable";
 
@@ -20,11 +19,19 @@ type ServerDisconnectMsg = {
 
 type ApiMsg = CameraGrabApiMsg | ImuApiMsg | ServerDisconnectMsg;
 
+type ImuDataFrame = {
+  error?: string;
+  accelerometer?: [x: number, y: number, z: number];
+  gyroscope?: [x: number, y: number, z: number];
+  magnetometer?: [x: number, y: number, z: number];
+  quaternion?: [x: number, y: number, z: number, w: number];
+};
+
 export class Api {
   waitingOnButton: Observable<boolean>;
   sendPhotoFunc: Observable<(() => void) | null>;
-  imuData: Observable<number[][]>;
-  imuQuaternion: Observable<Quaternion | null>;
+  imuQuaternionData: Observable<number[][]>;
+  imuDataFrame: Observable<ImuDataFrame>;
 
   private ws: WebSocket;
 
@@ -36,13 +43,24 @@ export class Api {
     this.ws = ws;
     this.waitingOnButton = new Observable(false as boolean);
     this.sendPhotoFunc = new Observable(null as any);
-    this.imuData = new Observable([
+    this.imuQuaternionData = new Observable([
       [Math.floor(Date.now() / 1000)],
       [0],
       [0],
       [0],
     ]);
-    this.imuQuaternion = new Observable(null as any);
+    this.imuDataFrame = new Observable(
+      {
+        error:
+          "No IMU data is available. The device either does not support IMU data or has not been given permission.",
+      } as ImuDataFrame,
+      (frame) => {
+        // If we received any new data, the error above is invalid. clear it.
+        if ("error" in frame) {
+          delete frame["error"];
+        }
+      }
+    );
 
     ws.onmessage = async ({ data }: { data: string }) =>
       this.onMsg(JSON.parse(data) as ApiMsg);
@@ -65,7 +83,7 @@ export class Api {
         break;
 
       case "imu":
-        this.send(this.imuQuaternion.state);
+        this.send(this.imuDataFrame.state);
         break;
 
       case "disconnect":

@@ -49,7 +49,7 @@ jobs:
         with:
           # The arguments for the `git add` command (see the paragraph below for more info)
           # Default: '.'
-          add: "phone_sensor/build --force"
+          add: '["phone_sensor/build --force", "."]'
 
           # The message for the commit
           # Default: 'Commit from GitHub Actions (name of the workflow)'
@@ -66,11 +66,11 @@ jobs:
         run: |
           pip install -U bump2version
           git fetch --depth=500 # https://stackoverflow.com/a/45993185/1266662
-          git add .
           git config user.name "GH Actions CI"
           git config user.email "callumjhays@gmail.com"
           bump2version patch --commit \
-            --current-version=$(git describe --tags --abbrev=0)
+            --current-version $(git describe --tags --abbrev=0) \
+            setup.py package.json package-lock.json
 
       - name: Publish distribution 📦 to PyPI
         if: startsWith(github.ref, 'refs/tags')

@@ -15,8 +15,11 @@ import subprocess
 import pyqrcode # type: ignore
 
 import websockets
-# from websockets.client import WebSocketClientProtocol
-from websockets.exceptions import WebSocketException
+try: # WebSocketException is not defined for ver<8 of websockets lib
+    from websockets.exceptions import WebSocketException
+except ImportError:
+    WebSocketException = Exception
+
 from websockets.http import Headers
 from websockets.server import WebSocketServerProtocol
 import numpy as np # type: ignore

@@ -236,7 +236,7 @@ class PhoneSensor:
 
 
             else:
-                file = Path(__file__).parent / '..' / ('build' + path)
+                file = Path(__file__).parent / ('build' + path)
                 return (HTTPStatus.OK, {
                     'Content-Type': _extensions_map[file.suffix]
                 }, file.read_bytes())
@@ -246,16 +246,19 @@ class PhoneSensor:
         return None
 
 
-# Ripped from https://docs.python.org/3/library/ssl.html#self-signed-certificates
+# Adapted from https://docs.python.org/3/library/ssl.html#self-signed-certificates
 def use_selfsigned_ssl_cert():
-    certfile = Path(__file__).parent / '.self-signed-cert.pem'
 
+    # Generation probably isn't required.
+    # Reusing the same one is fine as they only need be unique for each domain name
+    # which is n/a for us as we use IP addresses
+    certfile = Path(__file__).parent / 'ssl-cert.pem'
     if not certfile.exists():
         subprocess.check_call(
             'openssl req -new -x509 -days 365 -nodes \
                 -out {0} \
                 -keyout {0} \
-                -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=www.example.ro"'\
+                -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=*"'\
                     .format(certfile), shell=True, stderr=subprocess.DEVNULL)
 
     # keyfile not needed

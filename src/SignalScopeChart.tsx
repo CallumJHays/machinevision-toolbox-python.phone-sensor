@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import uPlot from "uplot";
 import { Observable } from "./observable";
 import unwrap from "ts-unwrap";

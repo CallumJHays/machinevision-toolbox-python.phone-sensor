@@ -24,7 +24,7 @@
   },
   "scripts": {
     "start": "BROWSER=none react-scripts start",
-    "build": "react-scripts build",
+    "build": "react-scripts build && rm -rf phone_sensor/build && mv build phone_sensor",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

@@ -12,7 +12,7 @@ while True:
 
         imudata = phone.imu()
         if imudata.accelerometer:
-            plt.bar(imudata.accelerometer.__dataclass_fields__, imu.accelerometer) # type: ignore
+            plt.bar(['x', 'y', 'z'], imu.accelerometer) # type: ignore
             plt.show(block=False)
         else:
             print('No accelerometer data found')

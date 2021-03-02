@@ -1,6 +1,5 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-# self-signed cert
-*.pem
+# prod build
+build
 
 # dependencies
 /node_modules
@@ -25,3 +24,4 @@ yarn-error.log*
 __pycache__
 *.pyc
 .eslintcache
+*.egg-info

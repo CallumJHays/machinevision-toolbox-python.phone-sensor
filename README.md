@@ -5,7 +5,9 @@
 Install with `pip`:
 
 ```bash
-pip install -u machinevision-toolbox-python.phone-sensor
+pip install -U machinevision-toolbox-python.phone-sensor
+# or
+pip install git+https://github.com/CallumJHays/mvt-phonesensor-app
 ```
 
 Example Code:

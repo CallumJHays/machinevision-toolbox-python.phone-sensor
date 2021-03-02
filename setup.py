@@ -43,12 +43,12 @@ setup(
         'Programming Language :: Python :: 3 :: Only'],
 
     project_urls={
-        'Documentation': 'https://github.com/callumjhays/mvt-phonesensor-app',
-        'Source': 'https://github.com/callumjhays/mvt-phonesensor-app',
-        'Tracker': 'https://github.com/callumjhays/mvt-phonesensor-app/issues',
+        'Documentation': 'https://github.com/CallumJHays/machinevision-toolbox-python.phone-sensor',
+        'Source': 'https://github.com/CallumJHays/machinevision-toolbox-python.phone-sensor',
+        'Tracker': 'https://github.com/CallumJHays/machinevision-toolbox-python.phone-sensor/issues',
     },
 
-    url='https://github.com/callumjhays/mvt-phonesensor-app',
+    url='https://github.com/CallumJHays/machinevision-toolbox-python.phone-sensor',
 
     author='Callum Hays',
 

@@ -69,7 +69,7 @@ jobs:
     steps:
       - name: Bump Version
         run: |
-          pip install -u bump2version
+          pip install -U bump2version
           bump2version patch --commit \
             --current-version=$(git describe --tags --abbrev=0)
 

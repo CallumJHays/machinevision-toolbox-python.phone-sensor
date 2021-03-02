@@ -55,16 +55,6 @@ jobs:
           # Default: 'Commit from GitHub Actions (name of the workflow)'
           message: "[Automated] build client"
 
-      - uses: EndBug/add-and-commit@v7 # You can change this to use a specific version
-        with:
-          # The arguments for the `git add` command (see the paragraph below for more info)
-          # Default: '.'
-          add: "."
-
-          # The message for the commit
-          # Default: 'Commit from GitHub Actions (name of the workflow)'
-          message: "[Automated] build client"
-
       # see https://packaging.python.org/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
       # - name: Publish distribution 📦 to Test PyPI
       #   uses: pypa/gh-action-pypi-publish@master
@@ -76,6 +66,7 @@ jobs:
         run: |
           pip install -U bump2version
           git fetch --depth=500 # https://stackoverflow.com/a/45993185/1266662
+          git add .
           bump2version patch --commit \
             --current-version=$(git describe --tags --abbrev=0)
 

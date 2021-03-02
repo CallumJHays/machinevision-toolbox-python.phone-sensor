@@ -192,7 +192,8 @@ class PhoneSensor:
             self._out.put(ClientDisconnect(f"Client from {ip} disconnected"))
 
 
-    #  Doesn't work :(
+    # for proxying the webpack websocket to the webpack dev server
+    #  Doesn't seem to work :(
     # async def _ws_proxy(self, from_: WebSocketClientProtocol, to: WebSocketServerProtocol):
     #     while True:
     #         upstream, downstream = asyncio.ensure_future(from_.recv()), asyncio.ensure_future(to.recv())
@@ -239,7 +240,7 @@ class PhoneSensor:
 
 
             else:
-                file = Path(__file__).parent / ('build' + path)
+                file = Path(__file__).parent / ('js_client' + path)
                 return (HTTPStatus.OK, {
                     'Content-Type': _extensions_map[file.suffix]
                 }, file.read_bytes())

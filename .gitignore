@@ -1,5 +1,5 @@
 # prod build
-build
+js_client
 
 # dependencies
 /node_modules

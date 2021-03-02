@@ -62,11 +62,6 @@ jobs:
       #     password: ${{ secrets.TEST_PYPI_API_TOKEN }}
       #     repository_url: https://test.pypi.org/legacy/
 
-  deploy-to-pypi:
-    runs-on: ubuntu-latest
-    needs: build
-
-    steps:
       - name: Bump Version
         run: |
           pip install -U bump2version

@@ -8,16 +8,31 @@ phone = PhoneSensor(
 
 while True:
     try:
-        img = phone.grab(button=True)
+        img, timestamp = phone.grab(button=True)
 
-        imudata = phone.imu()
-        if imudata.accelerometer:
-            plt.bar(['x', 'y', 'z'], imu.accelerometer) # type: ignore
+        try:
+            imudata = phone.imu()
+            plt.figure()
+            plt.title("imu.quaternion: " +  # type: ignore
+                      str(imudata.posix_timestamp))
+            plt.bar(['x', 'y', 'z', 'w'], imu.quaternion)  # type: ignore
             plt.show(block=False)
-        else:
-            print('No accelerometer data found')
 
-        plt.imshow(img) # type: ignore
+            if imudata.accelerometer:
+                plt.figure()
+                plt.title("imu.accelerometer" +  # type: ignore
+                          str(imudata.posix_timestamp))
+                plt.bar(['x', 'y', 'z'], imu.accelerometer)  # type: ignore
+                plt.show(block=False)
+            else:
+                print('No accelerometer data found')
+
+        except PhoneSensor.DataUnavailable:
+            print('No IMU data found')
+
+        plt.figure()
+        plt.title("phone.grab: " + str(timestamp))  # type: ignore
+        plt.imshow(img)  # type: ignore
         plt.show()
 
     except PhoneSensor.ClientDisconnect:

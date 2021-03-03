@@ -20,11 +20,12 @@ type ServerDisconnectMsg = {
 type ApiMsg = CameraGrabApiMsg | ImuApiMsg | ServerDisconnectMsg;
 
 type ImuDataFrame = {
+  posixTimestamp: number;
   error?: string;
+  quaternion?: [x: number, y: number, z: number, w: number];
   accelerometer?: [x: number, y: number, z: number];
   gyroscope?: [x: number, y: number, z: number];
   magnetometer?: [x: number, y: number, z: number];
-  quaternion?: [x: number, y: number, z: number, w: number];
 };
 
 export class Api {
@@ -51,6 +52,7 @@ export class Api {
     ]);
     this.imuDataFrame = new Observable(
       {
+        posixTimestamp: NaN,
         error:
           "No IMU data is available. The device either does not support IMU data or has not been given permission.",
       } as ImuDataFrame,
@@ -67,6 +69,9 @@ export class Api {
   }
 
   private onMsg(msg: ApiMsg) {
+    if ("wait" in msg) {
+    }
+
     switch (msg.cmd) {
       case "grab":
         if (msg.button) {

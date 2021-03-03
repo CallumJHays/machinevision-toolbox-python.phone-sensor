@@ -21,24 +21,24 @@ function MainUI({ api }: { api: Api }) {
   const [showImuData, setShowImuData] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const sendPhoto = useCallback(
-    function sendPhoto() {
-      const canvas = unwrap(canvasRef.current);
-      const video = unwrap(videoRef.current);
-      setWaitingForButton(false);
+  const sendPhoto = useCallback(() => {
+    const canvas = unwrap(canvasRef.current);
+    const video = unwrap(videoRef.current);
+    setWaitingForButton(false);
 
-      const w = (canvas.width = video.videoWidth);
-      const h = (canvas.height = video.videoHeight);
-      const ctx = unwrap(canvas.getContext("2d"));
-      ctx.drawImage(video, 0, 0);
-      const img = ctx
-        .getImageData(0, 0, w, h)
-        // discard the alpha channel by skipping every 4th byte
-        .data.filter((_, idx) => idx % 4 !== 3);
-      api.send(new Blob([new Uint16Array([w, h]), img]));
-    },
-    [api, setWaitingForButton]
-  );
+    const w = (canvas.width = video.videoWidth);
+    const h = (canvas.height = video.videoHeight);
+    const ctx = unwrap(canvas.getContext("2d"));
+    ctx.drawImage(video, 0, 0);
+    const img = ctx
+      .getImageData(0, 0, w, h)
+      // discard the alpha channel by skipping every 4th byte
+      .data.filter((_, idx) => idx % 4 !== 3);
+
+    // always 24 chars wide - convert to POSIX on backend
+    const timestamp = new Date().toISOString();
+    api.send(new Blob([timestamp, new Uint16Array([w, h]), img]));
+  }, [api, setWaitingForButton]);
 
   useEffect(() => {
     const video = unwrap(videoRef.current);
@@ -151,9 +151,9 @@ function MainUI({ api }: { api: Api }) {
       api.imuQuaternionData.set(data.slice());
       api.imuDataFrame.set({
         ...api.imuDataFrame.state,
+        posixTimestamp: now,
         quaternion: [q.x, q.y, q.z, q.w],
       });
-      // api.imuDataFrame.set(quaternion);
     };
 
     window.addEventListener("deviceorientation", onDeviceOrientation);
@@ -216,11 +216,6 @@ function MainUI({ api }: { api: Api }) {
                   keepLastSecs: 5,
                 }}
               />
-              {/* Has some graphical bugs. Leaving here incase it wants to be developed in the future */}
-              {/* <SignalBarChart
-                data={api.imuQuaternionData}
-                labels={["alpha", "beta", "gamma"]}
-              /> */}
             </div>
           ) : null}
 

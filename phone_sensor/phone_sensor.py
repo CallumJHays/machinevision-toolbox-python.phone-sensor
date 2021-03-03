@@ -3,7 +3,7 @@ from http import HTTPStatus
 from http.client import HTTPResponse
 from pathlib import Path
 from urllib.request import urlopen
-from typing import Any, Optional as Opt, NamedTuple, Union
+from typing import Any, Optional as Opt, NamedTuple, Union, Tuple
 from typing_extensions import Literal
 import json
 import socket
@@ -12,41 +12,47 @@ from threading import Thread
 from queue import Queue
 import ssl
 import subprocess
-import pyqrcode # type: ignore
+import pyqrcode  # type: ignore
+import dateutil.parser
 
 import websockets
-try: # WebSocketException is not defined for ver<8 of websockets lib
+try:  # WebSocketException is not defined for ver<8 of websockets lib
     from websockets.exceptions import WebSocketException
 except ImportError:
     WebSocketException = Exception
 
 from websockets.http import Headers
 from websockets.server import WebSocketServerProtocol
-import numpy as np # type: ignore
+import numpy as np  # type: ignore
+from datetime import datetime
+
 
 class ImuDataFrame:
     class XyzTuple(NamedTuple):
         x: float
         y: float
         z: float
-    
+
     class Quaternion(NamedTuple):
         x: float
         y: float
         z: float
         w: float
 
+    posix_timestamp: float  # posix timestamp
+    quaternion: Quaternion
     accelerometer: Opt[XyzTuple]
     gyroscope: Opt[XyzTuple]
     magnetometer: Opt[XyzTuple]
-    quaternion: Quaternion
 
 
 class ClientDisconnect(Exception):
     pass
 
+
 class DataUnavailable(Exception):
     pass
+
 
 class PhoneSensor:
 
@@ -71,13 +77,12 @@ class PhoneSensor:
                kwargs={'host': host, 'port': port},
                daemon=True).start()
 
-
     def grab(self,
              cam: Opt[Literal['front', 'back']] = None,
              button: bool = False,
-             wait: Opt[float] = None
-        ) -> np.ndarray:
-        
+             wait: Opt[float] = None) \
+            -> Tuple[np.ndarray, float]:
+
         res = self._rpc(json.dumps({
             'cmd': 'grab',
             'cam': cam,
@@ -86,23 +91,30 @@ class PhoneSensor:
         }))
 
         assert isinstance(res, bytes)
-        width, height = struct.unpack('<HH', res[:4])
-        
-        return np.frombuffer(res[4:], dtype=np.uint8).reshape((height, width, 3)) # type: ignore
-                
+        # the first 24 bytes should be RFC3339 (ISO) date - convert to posix
+        # https://stackoverflow.com/a/969324/1266662
+        timestamp = dateutil.parser.parse(res[:24]).timestamp()
 
+        width, height = struct.unpack('<HH', res[24:28])
+
+        img = np.frombuffer(  # type: ignore
+            res[28:],
+            dtype=np.uint8
+        ).reshape((height, width, 3))
+
+        return img, timestamp
 
     def imu(self, wait: Opt[float] = None) -> ImuDataFrame:
         resp = json.loads(self._rpc(json.dumps({
             'cmd': 'imu',
             'wait': wait
         })))
-        print('got resp', resp)
 
         if 'error' in resp:
             raise DataUnavailable(resp['error'])
 
         frame = ImuDataFrame()
+        frame.posix_timestamp = resp['posixTimestamp']
         frame.accelerometer = ImuDataFrame.XyzTuple(*resp['accelerometer']) \
             if 'accelerometer' in resp else None
         frame.gyroscope = ImuDataFrame.XyzTuple(*resp['gyroscope']) \
@@ -110,10 +122,9 @@ class PhoneSensor:
         frame.magnetometer = ImuDataFrame.XyzTuple(*resp['magnetometer']) \
             if 'magnetometer' in resp else None
         frame.quaternion = ImuDataFrame.Quaternion(*resp['quaternion'])
-        
+
         return frame
 
-    
     def _rpc(self, cmd: str):
         self._waiting = True
         self._in.put(cmd)
@@ -123,16 +134,16 @@ class PhoneSensor:
             raise res
         return res
 
-
     def _start_server(self, host: str, port: int):
         self.loop = asyncio.new_event_loop()
         server = websockets.serve(self._api, host, port,
-            # just generate a new certificate every time.
-            # Hopefully this doesnt drain too much entropy
-            ssl=use_selfsigned_ssl_cert(), 
-            max_size=100_000_000, # allow for big images to be sent (<100MB)
-            process_request=self._maybe_serve_static, loop=self.loop)
-        
+                                  # just generate a new certificate every time.
+                                  # Hopefully this doesnt drain too much entropy
+                                  ssl=use_selfsigned_ssl_cert(),
+                                  # allow for big images to be sent (<100MB)
+                                  max_size=100_000_000,
+                                  process_request=self._maybe_serve_static, loop=self.loop)
+
         url = f"https://{_get_local_ip()}:{port}"
 
         # display cmdline connect msg
@@ -146,12 +157,11 @@ class PhoneSensor:
         if self._qrcode:
             # use url.upper() as it's needed for alphanumeric encoding:
             # https://pythonhosted.org/PyQRCode/encoding.html#alphanumeric
-            qrcode = pyqrcode.create(url.upper()).terminal() # type: ignore
+            qrcode = pyqrcode.create(url.upper()).terminal()  # type: ignore
             print(f'Or scan the following QR Code: {qrcode}')
 
         self.loop.run_until_complete(server)
         self.loop.run_forever()
-
 
     async def _api(self, ws: WebSocketServerProtocol, path: str):
         ip = ws.local_address[0]
@@ -166,7 +176,7 @@ class PhoneSensor:
         #     return
 
         # new connection
-        if self._ws: # if we already have one,
+        if self._ws:  # if we already have one,
 
             try:
                 await self._ws.send(json.dumps({
@@ -182,15 +192,14 @@ class PhoneSensor:
         self._ws = ws
 
         try:
-            while True: 
+            while True:
                 cmd = self._in.get()
                 await ws.send(cmd)
                 res = await ws.recv()
                 self._out.put(res)
-            
+
         except WebSocketException:
             self._out.put(ClientDisconnect(f"Client from {ip} disconnected"))
-
 
     # for proxying the webpack websocket to the webpack dev server
     #  Doesn't seem to work :(
@@ -203,10 +212,10 @@ class PhoneSensor:
     #         done, _ = asyncio.wait(
     #             { upstream, downstream },
     #             return_when=asyncio.FIRST_COMPLETED)
-            
+
     #         if upstream in done:
     #             await to.send(await upstream)
-            
+
     #         if downstream in done:
     #             await from_.send(await downstream)
 
@@ -221,30 +230,30 @@ class PhoneSensor:
             '.svg':	'image/svg+xml',
             '.css':	'text/css',
             '.js':	'application/x-javascript',
-            '': 'application/octet-stream', # Default
+            '': 'application/octet-stream',  # Default
         }
 
         if path == '/sockjs-node':
             return HTTPStatus.NOT_FOUND, {}, b''
 
-        if path != '/ws': # and path != '/sockjs-node':
+        if path != '/ws':  # and path != '/sockjs-node':
             if path == '/':
                 path = '/index.html'
-            
+
             if self._proxy_client_from:
-                print('proxying client from http://' + self._proxy_client_from + path)
-                res: HTTPResponse = urlopen('http://' + self._proxy_client_from + path)
+                print('proxying client from http://' +
+                      self._proxy_client_from + path)
+                res: HTTPResponse = urlopen(
+                    'http://' + self._proxy_client_from + path)
                 return (HTTPStatus.OK, {
                     'Content-Type': res.headers.get('Content-Type')
                 }, res.read())
-
 
             else:
                 file = Path(__file__).parent / ('js_client' + path)
                 return (HTTPStatus.OK, {
                     'Content-Type': _extensions_map[file.suffix]
                 }, file.read_bytes())
-            
 
         # if None is returned, will default to ws handler
         return None
@@ -262,17 +271,18 @@ def use_selfsigned_ssl_cert():
             'openssl req -new -x509 -days 365 -nodes \
                 -out {0} \
                 -keyout {0} \
-                -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=*"'\
-                    .format(certfile), shell=True, stderr=subprocess.DEVNULL)
+                -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=*"'
+            .format(certfile), shell=True, stderr=subprocess.DEVNULL)
 
     # keyfile not needed
     # with NamedTemporaryFile('r') as key_file:
     #     key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("utf-8"))
 
-    ssl_context: Any = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER) # type: ignore
-    ssl_context.load_cert_chain(certfile) # type: ignore
+    ssl_context: Any = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)  # type: ignore
+    ssl_context.load_cert_chain(certfile)  # type: ignore
 
     return ssl_context
+
 
 def _get_local_ip():
     try:
@@ -285,4 +295,4 @@ def _get_local_ip():
             for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]
         ][0][1]]) + ["no IP found"])[0]
     except OSError:
-        return 'localhost' # probably not connected to a LAN
+        return 'localhost'  # probably not connected to a LAN

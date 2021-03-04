@@ -3,7 +3,7 @@ from http import HTTPStatus
 from http.client import HTTPResponse
 from pathlib import Path
 from urllib.request import urlopen
-from typing import Any, Optional as Opt, NamedTuple, Union, Tuple
+from typing import Any, Optional as Opt, NamedTuple, Union, Tuple, cast
 from typing_extensions import Literal
 import json
 import socket
@@ -14,7 +14,7 @@ import ssl
 import subprocess
 import pyqrcode  # type: ignore
 import dateutil.parser
-
+import logging
 import websockets
 try:  # WebSocketException is not defined for ver<8 of websockets lib
     from websockets.exceptions import WebSocketException
@@ -24,7 +24,7 @@ except ImportError:
 from websockets.http import Headers
 from websockets.server import WebSocketServerProtocol
 import numpy as np  # type: ignore
-from datetime import datetime
+from urllib.error import URLError
 
 
 class ImuDataFrame:
@@ -64,7 +64,9 @@ class PhoneSensor:
                  qrcode: bool = False,
                  proxy_client_from: Opt[str] = None,
                  host: str = "0.0.0.0",
-                 port: int = 8000):
+                 port: int = 8000,
+                 logger: logging.Logger = logging.getLogger('mvt.phone_sensor'),
+                 log_level: int = logging.WARN):
 
         self._ws: Opt[websockets.WebSocketServerProtocol] = None
         self._in: Queue[str] = Queue()
@@ -72,22 +74,29 @@ class PhoneSensor:
         self._waiting = False
         self._qrcode = qrcode
         self._proxy_client_from = proxy_client_from
+        self.logger = logger
+        self.logger.setLevel(log_level)
+        self.client_connected = False
 
         Thread(target=self._start_server,
                kwargs={'host': host, 'port': port},
                daemon=True).start()
+        assert self._out.get() == 'ready', "server failed to start"
 
     def grab(self,
              cam: Opt[Literal['front', 'back']] = None,
              button: bool = False,
-             wait: Opt[float] = None) \
-            -> Tuple[np.ndarray, float]:
+             wait: Opt[float] = None
+             ) -> Tuple[np.ndarray, float]:
+
+        assert not (wait is not None and button), \
+            "`wait` argument cannot be used with `button=True`"
 
         res = self._rpc(json.dumps({
             'cmd': 'grab',
             'cam': cam,
             'button': button,
-            'wait': wait
+            'wait_ms': wait * 1000 if wait else None
         }))
 
         assert isinstance(res, bytes)
@@ -104,10 +113,10 @@ class PhoneSensor:
 
         return img, timestamp
 
-    def imu(self, wait: Opt[float] = None) -> ImuDataFrame:
+    def imu(self, wait: Opt[float] = None) -> ImuDataFrame:  # type: ignore
         resp = json.loads(self._rpc(json.dumps({
             'cmd': 'imu',
-            'wait': wait
+            'wait_ms': wait * 1000 if wait else None
         })))
 
         if 'error' in resp:
@@ -160,12 +169,14 @@ class PhoneSensor:
             qrcode = pyqrcode.create(url.upper()).terminal()  # type: ignore
             print(f'Or scan the following QR Code: {qrcode}')
 
+        self._out.put("ready")
         self.loop.run_until_complete(server)
         self.loop.run_forever()
 
     async def _api(self, ws: WebSocketServerProtocol, path: str):
         ip = ws.local_address[0]
-        print(f"New client connected from {ip}")
+        self.logger.info(f"New client connected from {ip}")
+        self.client_connected = True
 
         # # handle webpack reload ws proxy
         # if path == '/sockjs-node' and self._proxy_client_from:
@@ -200,6 +211,7 @@ class PhoneSensor:
 
         except WebSocketException:
             self._out.put(ClientDisconnect(f"Client from {ip} disconnected"))
+            self.client_connected = False
 
     # for proxying the webpack websocket to the webpack dev server
     #  Doesn't seem to work :(
@@ -234,20 +246,26 @@ class PhoneSensor:
         }
 
         if path == '/sockjs-node':
-            return HTTPStatus.NOT_FOUND, {}, b''
+            return HTTPStatus.NOT_FOUND, cast(Any, {}), b''
 
         if path != '/ws':  # and path != '/sockjs-node':
             if path == '/':
                 path = '/index.html'
 
             if self._proxy_client_from:
-                print('proxying client from http://' +
-                      self._proxy_client_from + path)
-                res: HTTPResponse = urlopen(
-                    'http://' + self._proxy_client_from + path)
-                return (HTTPStatus.OK, {
-                    'Content-Type': res.headers.get('Content-Type')
-                }, res.read())
+                url = 'http://' + self._proxy_client_from + path
+                self.logger.info('proxying client from ' + url)
+
+                try:
+                    res: HTTPResponse = urlopen(url)
+                    return (HTTPStatus.OK, {
+                        'Content-Type': res.headers.get('Content-Type')
+                    }, res.read())
+
+                except URLError:
+                    self._out.put(ClientDisconnect(
+                        "Could not proxy to %s. Is the server specified by `proxy_client_from` running?" % url))
+                    return HTTPStatus.NOT_FOUND, cast(Any, {}), b''
 
             else:
                 file = Path(__file__).parent / ('js_client' + path)

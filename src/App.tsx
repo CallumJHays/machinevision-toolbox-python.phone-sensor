@@ -118,16 +118,16 @@ function MainUI({ api }: { api: Api }) {
       gamma,
     }: DeviceOrientationEvent) => {
       // append the data
-      const now = Date.now() / 1000;
+      const nowMs = Date.now();
       const data = api.imuQuaternionData.state;
-      data[0].push(now);
+      data[0].push(nowMs / 1000);
       data[1].push(alpha!);
       data[2].push(beta!);
       data[3].push(gamma!);
 
       // only keep scope.keepLastSecs worth of data
       const [time] = data;
-      const cutoffTime = now - KEEP_LAST_SECS_IMU_DATA;
+      const cutoffTime = nowMs - KEEP_LAST_SECS_IMU_DATA;
       const cutoffIdx = time.findIndex((t) => t >= cutoffTime);
       if (cutoffIdx > 0) {
         for (const series of data) {
@@ -151,7 +151,7 @@ function MainUI({ api }: { api: Api }) {
       api.imuQuaternionData.set(data.slice());
       api.imuDataFrame.set({
         ...api.imuDataFrame.state,
-        posixTimestamp: now,
+        posixTimestamp: nowMs,
         quaternion: [q.x, q.y, q.z, q.w],
       });
     };

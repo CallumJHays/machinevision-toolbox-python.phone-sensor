@@ -5,12 +5,12 @@ type CameraGrabApiMsg = {
   cmd: "grab";
   cam: string;
   button: boolean;
-  wait: number | null;
+  wait_ms: number | null;
 };
 
 type ImuApiMsg = {
   cmd: "imu";
-  wait: number | null;
+  wait_ms: number | null;
 };
 
 type ServerDisconnectMsg = {
@@ -28,11 +28,19 @@ type ImuDataFrame = {
   magnetometer?: [x: number, y: number, z: number];
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class Api {
   waitingOnButton: Observable<boolean>;
   sendPhotoFunc: Observable<(() => void) | null>;
   imuQuaternionData: Observable<number[][]>;
   imuDataFrame: Observable<ImuDataFrame>;
+  latestCmdTimestamps: {
+    grab: number;
+    imu: number;
+  };
 
   private ws: WebSocket;
 
@@ -63,24 +71,51 @@ export class Api {
         }
       }
     );
+    this.latestCmdTimestamps = {
+      grab: 0,
+      imu: 0,
+    };
 
     ws.onmessage = async ({ data }: { data: string }) =>
       this.onMsg(JSON.parse(data) as ApiMsg);
   }
 
-  private onMsg(msg: ApiMsg) {
-    if ("wait" in msg) {
+  private async onMsg(msg: ApiMsg) {
+    // handle "wait_ms"
+    let nowMs = 0;
+    if ("wait_ms" in msg && msg["wait_ms"] !== null) {
+      nowMs = Date.now();
+      const msToWait =
+        this.latestCmdTimestamps[msg.cmd] + msg["wait_ms"] - nowMs;
+      console.log({
+        msg,
+        nowMs,
+        msToWait,
+      });
+
+      if (msToWait > 0) {
+        await sleep(msToWait);
+        console.log({
+          passed: Date.now() - nowMs,
+        });
+      }
     }
 
+    // different functionality based on api cmd
     switch (msg.cmd) {
       case "grab":
         if (msg.button) {
           this.waitingOnButton.set(true);
         } else if (this.sendPhotoFunc.state !== null) {
-          this.sendPhotoFunc.state();
+          const sendPhoto = this.sendPhotoFunc.state;
+          sendPhoto();
+          this.latestCmdTimestamps["grab"] = Date.now();
+          console.log(this.latestCmdTimestamps["grab"] - nowMs);
         } else {
+          // queue a send once sendPhoto function has been set
           const cb = (sendPhoto: (() => void) | null) => {
             sendPhoto!();
+            this.latestCmdTimestamps["grab"] = Date.now();
             this.sendPhotoFunc.deRegister(cb);
           };
           this.sendPhotoFunc.onChange(cb);
@@ -89,6 +124,8 @@ export class Api {
 
       case "imu":
         this.send(this.imuDataFrame.state);
+        this.latestCmdTimestamps["imu"] = Date.now();
+        console.log(this.latestCmdTimestamps["imu"] - nowMs);
         break;
 
       case "disconnect":

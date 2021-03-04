@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Current File",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Current File",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Examples/Timing",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceRoot}/examples/timing.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Examples/Devmode",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceRoot}/examples/devmode.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "https://localhost:8000",
+      "webRoot": "${workspaceRoot}/src"
+    }
+  ]
+}

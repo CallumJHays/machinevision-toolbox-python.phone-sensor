@@ -3,7 +3,7 @@ from http import HTTPStatus
 from http.client import HTTPResponse
 from pathlib import Path
 from urllib.request import urlopen
-from typing import Any, Optional as Opt, NamedTuple, Union, Tuple, cast
+from typing import Any, ContextManager, Optional, NamedTuple, Union, Tuple, cast
 from typing_extensions import Literal
 import json
 import socket
@@ -39,11 +39,11 @@ class ImuDataFrame:
         z: float
         w: float
 
-    posix_timestamp: float  # posix timestamp
+    unix_timestamp: float
     quaternion: Quaternion
-    accelerometer: Opt[XyzTuple]
-    gyroscope: Opt[XyzTuple]
-    magnetometer: Opt[XyzTuple]
+    accelerometer: Optional[XyzTuple]
+    gyroscope: Optional[XyzTuple]
+    magnetometer: Optional[XyzTuple]
 
 
 class ClientDisconnect(Exception):
@@ -54,7 +54,7 @@ class DataUnavailable(Exception):
     pass
 
 
-class PhoneSensor:
+class PhoneSensor(ContextManager['PhoneSensor']):
 
     ClientDisconnect = ClientDisconnect
     DataUnavailable = DataUnavailable
@@ -62,13 +62,13 @@ class PhoneSensor:
 
     def __init__(self,
                  qrcode: bool = False,
-                 proxy_client_from: Opt[str] = None,
+                 proxy_client_from: Optional[str] = None,
                  host: str = "0.0.0.0",
                  port: int = 8000,
                  logger: logging.Logger = logging.getLogger('mvt.phone_sensor'),
                  log_level: int = logging.WARN):
 
-        self._ws: Opt[websockets.WebSocketServerProtocol] = None
+        self._ws: Optional[websockets.WebSocketServerProtocol] = None
         self._in: Queue[str] = Queue()
         self._out: Queue[Union[websockets.Data, ClientDisconnect]] = Queue()
         self._waiting = False
@@ -77,16 +77,21 @@ class PhoneSensor:
         self.logger = logger
         self.logger.setLevel(log_level)
         self.client_connected = False
+        self.loop = asyncio.new_event_loop()
 
-        Thread(target=self._start_server,
-               kwargs={'host': host, 'port': port},
-               daemon=True).start()
+        self.server_thread = Thread(target=self._start_server,
+                                    kwargs={'host': host, 'port': port},
+                                    daemon=True)
+        self.server_thread.start()
         assert self._out.get() == 'ready', "server failed to start"
 
+    def __exit__(self):
+        self.close()
+
     def grab(self,
-             cam: Opt[Literal['front', 'back']] = None,
+             cam: Literal['front', 'back'] = 'back',
              button: bool = False,
-             wait: Opt[float] = None
+             wait: Optional[float] = None
              ) -> Tuple[np.ndarray, float]:
 
         assert not (wait is not None and button), \
@@ -94,9 +99,9 @@ class PhoneSensor:
 
         res = self._rpc(json.dumps({
             'cmd': 'grab',
-            'cam': cam,
+            'frontFacing': cam == 'front',
             'button': button,
-            'wait_ms': wait * 1000 if wait else None
+            'wait': wait
         }))
 
         assert isinstance(res, bytes)
@@ -106,24 +111,25 @@ class PhoneSensor:
 
         width, height = struct.unpack('<HH', res[24:28])
 
+        # reshape the data and omit the unfortunate alpha channel
         img = np.frombuffer(  # type: ignore
             res[28:],
             dtype=np.uint8
-        ).reshape((height, width, 3))
+        ).reshape((height, width, 4))[:, :, :3]  # unsure whether this is faster/slower than delete. think so
 
         return img, timestamp
 
-    def imu(self, wait: Opt[float] = None) -> ImuDataFrame:  # type: ignore
+    def imu(self, wait: Optional[float] = None) -> ImuDataFrame:  # type: ignore
         resp = json.loads(self._rpc(json.dumps({
             'cmd': 'imu',
-            'wait_ms': wait * 1000 if wait else None
+            'wait': wait
         })))
 
         if 'error' in resp:
             raise DataUnavailable(resp['error'])
 
         frame = ImuDataFrame()
-        frame.posix_timestamp = resp['posixTimestamp']
+        frame.unix_timestamp = resp['unixTimestamp']
         frame.accelerometer = ImuDataFrame.XyzTuple(*resp['accelerometer']) \
             if 'accelerometer' in resp else None
         frame.gyroscope = ImuDataFrame.XyzTuple(*resp['gyroscope']) \
@@ -133,6 +139,10 @@ class PhoneSensor:
         frame.quaternion = ImuDataFrame.Quaternion(*resp['quaternion'])
 
         return frame
+
+    def close(self):
+        self.loop.close()
+        self.server_thread.join()
 
     def _rpc(self, cmd: str):
         self._waiting = True
@@ -144,14 +154,15 @@ class PhoneSensor:
         return res
 
     def _start_server(self, host: str, port: int):
-        self.loop = asyncio.new_event_loop()
-        server = websockets.serve(self._api, host, port,
-                                  # just generate a new certificate every time.
-                                  # Hopefully this doesnt drain too much entropy
-                                  ssl=use_selfsigned_ssl_cert(),
-                                  # allow for big images to be sent (<100MB)
-                                  max_size=100_000_000,
-                                  process_request=self._maybe_serve_static, loop=self.loop)
+        async def _websocket_server():
+            # TODO: graceful shutdown https://stackoverflow.com/a/48825733/1266662
+            await websockets.serve(self._api, host, port,
+                                   # just generate a new certificate every time.
+                                   # Hopefully this doesnt drain too much entropy
+                                   ssl=use_selfsigned_ssl_cert(),
+                                   # allow for big images to be sent (<100MB)
+                                   max_size=100_000_000,
+                                   process_request=self._maybe_serve_static, loop=self.loop)
 
         url = f"https://{_get_local_ip()}:{port}"
 
@@ -170,7 +181,7 @@ class PhoneSensor:
             print(f'Or scan the following QR Code: {qrcode}')
 
         self._out.put("ready")
-        self.loop.run_until_complete(server)
+        self.loop.run_until_complete(_websocket_server())
         self.loop.run_forever()
 
     async def _api(self, ws: WebSocketServerProtocol, path: str):

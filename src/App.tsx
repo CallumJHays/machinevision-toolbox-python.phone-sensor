@@ -20,6 +20,7 @@ function MainUI({ api }: { api: Api }) {
   ] = api.waitingOnButton.useState();
   const [showImuData, setShowImuData] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [frontCamera, setFrontCamera] = useState(true);
 
   const sendPhoto = useCallback(() => {
     const canvas = unwrap(canvasRef.current);
@@ -29,15 +30,13 @@ function MainUI({ api }: { api: Api }) {
     const w = (canvas.width = video.videoWidth);
     const h = (canvas.height = video.videoHeight);
     const ctx = unwrap(canvas.getContext("2d"));
-    ctx.drawImage(video, 0, 0);
-    const img = ctx
-      .getImageData(0, 0, w, h)
-      // discard the alpha channel by skipping every 4th byte
-      .data.filter((_, idx) => idx % 4 !== 3);
-
     // always 24 chars wide - convert to POSIX on backend
     const timestamp = new Date().toISOString();
-    api.send(new Blob([timestamp, new Uint16Array([w, h]), img]));
+
+    ctx.drawImage(video, 0, 0);
+    const imgdata = ctx.getImageData(0, 0, w, h).data;
+
+    api.send(new Blob([timestamp, new Uint16Array([w, h]), imgdata]));
   }, [api, setWaitingForButton]);
 
   useEffect(() => {
@@ -46,6 +45,8 @@ function MainUI({ api }: { api: Api }) {
     (async function startLiveStream() {
       video.srcObject = await navigator.mediaDevices.getUserMedia({
         video: {
+          facingMode: frontCamera ? "user" : "environment",
+
           width: {
             min: 1280,
             ideal: 1920,
@@ -64,8 +65,15 @@ function MainUI({ api }: { api: Api }) {
     // wait for the first frame to load before letting api know we're good to send photos
     video.onloadeddata = () => api.sendPhotoFunc.set(sendPhoto);
 
-    // don't bother with cleanup for now
-  }, [api, sendPhoto]);
+    // stop all tracks on cleanup
+    return () => {
+      if (video.srcObject instanceof MediaStream) {
+        for (const track of video.srcObject.getTracks()) {
+          track.stop();
+        }
+      }
+    };
+  }, [api, sendPhoto, frontCamera]);
 
   useEffect(() => {
     (async function setupSensors() {
@@ -117,17 +125,22 @@ function MainUI({ api }: { api: Api }) {
       beta,
       gamma,
     }: DeviceOrientationEvent) => {
+      // sometimes this event happens even on devices that don't have sensors
+      if (alpha === null) {
+        return;
+      }
+
       // append the data
-      const nowMs = Date.now();
-      const data = api.imuQuaternionData.state;
-      data[0].push(nowMs / 1000);
+      const now = Date.now() / 1000;
+      const data = api.imuRawData.state;
+      data[0].push(now / 1000);
       data[1].push(alpha!);
       data[2].push(beta!);
       data[3].push(gamma!);
 
       // only keep scope.keepLastSecs worth of data
       const [time] = data;
-      const cutoffTime = nowMs - KEEP_LAST_SECS_IMU_DATA;
+      const cutoffTime = now - KEEP_LAST_SECS_IMU_DATA;
       const cutoffIdx = time.findIndex((t) => t >= cutoffTime);
       if (cutoffIdx > 0) {
         for (const series of data) {
@@ -148,10 +161,10 @@ function MainUI({ api }: { api: Api }) {
       // elm.style.transform = "matrix3d(" + q.conjugate().toMatrix4() + ")";
 
       // update the observable
-      api.imuQuaternionData.set(data.slice());
+      api.imuRawData.set(data.slice());
       api.imuDataFrame.set({
         ...api.imuDataFrame.state,
-        posixTimestamp: nowMs,
+        unixTimestamp: now,
         quaternion: [q.x, q.y, q.z, q.w],
       });
     };
@@ -159,7 +172,7 @@ function MainUI({ api }: { api: Api }) {
     window.addEventListener("deviceorientation", onDeviceOrientation);
     return () =>
       window.removeEventListener("deviceorientation", onDeviceOrientation);
-  }, [api.imuQuaternionData, api.imuDataFrame]);
+  }, [api.imuRawData, api.imuDataFrame]);
 
   return (
     <div
@@ -212,7 +225,7 @@ function MainUI({ api }: { api: Api }) {
                   name: "Orientation",
                   styles: null,
                   labels: ["alpha", "beta", "gamma"],
-                  data: api.imuQuaternionData,
+                  data: api.imuRawData,
                   keepLastSecs: 5,
                 }}
               />
@@ -251,6 +264,23 @@ function MainUI({ api }: { api: Api }) {
                 <Switch
                   onChange={setShowImuData}
                   checked={showImuData}
+                  height={30}
+                  width={60}
+                />
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  fontSize: "1rem",
+                }}
+              >
+                Use front-facing camera?
+                <Switch
+                  onChange={setFrontCamera}
+                  checked={frontCamera}
                   height={30}
                   width={60}
                 />

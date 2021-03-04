@@ -14,15 +14,15 @@ while True:
             imudata = phone.imu()
             plt.figure()
             plt.title("imu.quaternion: " +  # type: ignore
-                      str(imudata.posix_timestamp))
-            plt.bar(['x', 'y', 'z', 'w'], imu.quaternion)  # type: ignore
+                      str(imudata.unix_timestamp))
+            plt.bar(['x', 'y', 'z', 'w'], imudata.quaternion)  # type: ignore
             plt.show(block=False)
 
             if imudata.accelerometer:
                 plt.figure()
                 plt.title("imu.accelerometer" +  # type: ignore
-                          str(imudata.posix_timestamp))
-                plt.bar(['x', 'y', 'z'], imu.accelerometer)  # type: ignore
+                          str(imudata.unix_timestamp))
+                plt.bar(['x', 'y', 'z'], imudata.accelerometer)  # type: ignore
                 plt.show(block=False)
             else:
                 print('No accelerometer data found')

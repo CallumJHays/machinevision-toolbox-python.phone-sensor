@@ -3,14 +3,14 @@ import { Observable } from "./observable";
 
 type CameraGrabApiMsg = {
   cmd: "grab";
-  cam: string;
+  frontFacing: boolean;
   button: boolean;
-  wait_ms: number | null;
+  wait: number | null;
 };
 
 type ImuApiMsg = {
   cmd: "imu";
-  wait_ms: number | null;
+  wait: number | null;
 };
 
 type ServerDisconnectMsg = {
@@ -20,7 +20,7 @@ type ServerDisconnectMsg = {
 type ApiMsg = CameraGrabApiMsg | ImuApiMsg | ServerDisconnectMsg;
 
 type ImuDataFrame = {
-  posixTimestamp: number;
+  unixTimestamp: number;
   error?: string;
   quaternion?: [x: number, y: number, z: number, w: number];
   accelerometer?: [x: number, y: number, z: number];
@@ -34,8 +34,8 @@ function sleep(ms: number) {
 
 export class Api {
   waitingOnButton: Observable<boolean>;
-  sendPhotoFunc: Observable<(() => void) | null>;
-  imuQuaternionData: Observable<number[][]>;
+  sendPhotoFunc: Observable<((frontFacing: boolean) => void) | null>;
+  imuRawData: Observable<number[][]>;
   imuDataFrame: Observable<ImuDataFrame>;
   latestCmdTimestamps: {
     grab: number;
@@ -52,7 +52,7 @@ export class Api {
     this.ws = ws;
     this.waitingOnButton = new Observable(false as boolean);
     this.sendPhotoFunc = new Observable(null as any);
-    this.imuQuaternionData = new Observable([
+    this.imuRawData = new Observable([
       [Math.floor(Date.now() / 1000)],
       [0],
       [0],
@@ -60,7 +60,7 @@ export class Api {
     ]);
     this.imuDataFrame = new Observable(
       {
-        posixTimestamp: NaN,
+        unixTimestamp: NaN,
         error:
           "No IMU data is available. The device either does not support IMU data or has not been given permission.",
       } as ImuDataFrame,
@@ -81,23 +81,14 @@ export class Api {
   }
 
   private async onMsg(msg: ApiMsg) {
-    // handle "wait_ms"
-    let nowMs = 0;
-    if ("wait_ms" in msg && msg["wait_ms"] !== null) {
-      nowMs = Date.now();
+    // handle "wait"
+    if ("wait" in msg && msg["wait"] !== null) {
+      const nowMs = Date.now();
       const msToWait =
-        this.latestCmdTimestamps[msg.cmd] + msg["wait_ms"] - nowMs;
-      console.log({
-        msg,
-        nowMs,
-        msToWait,
-      });
+        this.latestCmdTimestamps[msg.cmd] + msg["wait"] * 1000 - nowMs;
 
       if (msToWait > 0) {
         await sleep(msToWait);
-        console.log({
-          passed: Date.now() - nowMs,
-        });
       }
     }
 
@@ -108,14 +99,13 @@ export class Api {
           this.waitingOnButton.set(true);
         } else if (this.sendPhotoFunc.state !== null) {
           const sendPhoto = this.sendPhotoFunc.state;
-          sendPhoto();
           this.latestCmdTimestamps["grab"] = Date.now();
-          console.log(this.latestCmdTimestamps["grab"] - nowMs);
+          sendPhoto(msg["frontFacing"]);
         } else {
           // queue a send once sendPhoto function has been set
-          const cb = (sendPhoto: (() => void) | null) => {
-            sendPhoto!();
+          const cb = (sendPhoto: ((frontFacing: boolean) => void) | null) => {
             this.latestCmdTimestamps["grab"] = Date.now();
+            sendPhoto!(msg["frontFacing"]);
             this.sendPhotoFunc.deRegister(cb);
           };
           this.sendPhotoFunc.onChange(cb);
@@ -125,7 +115,6 @@ export class Api {
       case "imu":
         this.send(this.imuDataFrame.state);
         this.latestCmdTimestamps["imu"] = Date.now();
-        console.log(this.latestCmdTimestamps["imu"] - nowMs);
         break;
 
       case "disconnect":

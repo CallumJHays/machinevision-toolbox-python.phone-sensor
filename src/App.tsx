@@ -303,13 +303,29 @@ function MainUI({ api }: { api: Api }) {
                   fontSize: "1rem",
                 }}
               >
-                Use front-facing camera?
-                <Switch
-                  onChange={setFrontCamera}
-                  checked={frontCamera ?? true} // TODO: this!!
-                  height={30}
-                  width={60}
-                />
+                Camera
+                <select
+                  className="form-select"
+                  onChange={(e: any) => {
+                    setFrontCamera(
+                      {
+                        default: null,
+                        front: true,
+                        back: false,
+                      }[e.target.value as "default" | "front" | "back"]
+                    );
+                  }}
+                >
+                  <option value="default" selected={frontCamera === null}>
+                    Default (obey `phone.grab(cam=?)`)
+                  </option>
+                  <option value="front" selected={frontCamera === true}>
+                    Front Camera (touchscreen side)
+                  </option>
+                  <option value="back" selected={frontCamera === false}>
+                    Back Camera
+                  </option>
+                </select>
               </label>
             </Modal.Body>
           </Modal>

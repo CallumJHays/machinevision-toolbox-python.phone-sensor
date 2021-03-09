@@ -111,6 +111,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         self.logger.setLevel(log_level)
         self.client_connected = False
         self.loop = asyncio.new_event_loop()
+        self.stop_flag = self.loop.create_future()
 
         self.server_thread = Thread(target=self._start_server,
                                     kwargs={'host': host, 'port': port},
@@ -118,7 +119,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         self.server_thread.start()
         assert self._out.get() == 'ready', "server failed to start"
 
-    def __exit__(self):
+    def __exit__(self, _1, _2, _3):
         self.close()
 
     def grab(self,
@@ -223,7 +224,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         Use of `PhoneSensor` as a context manager is preferred to this, where possible.
         May be called automatically by the garbage collector.
         """
-        self.loop.close()
+        self.loop.call_soon_threadsafe(self.stop_flag.set_result, None)
         self.server_thread.join()
 
     def _rpc(self, cmd: str):
@@ -238,13 +239,15 @@ class PhoneSensor(ContextManager['PhoneSensor']):
     def _start_server(self, host: str, port: int):
         async def _websocket_server():
             # TODO: graceful shutdown https://stackoverflow.com/a/48825733/1266662
-            await websockets.serve(self._api, host, port,
-                                   # just generate a new certificate every time.
-                                   # Hopefully this doesnt drain too much entropy
-                                   ssl=_use_selfsigned_ssl_cert(),
-                                   # allow for big images to be sent (<100MB)
-                                   max_size=100_000_000,
-                                   process_request=self._maybe_serve_static, loop=self.loop)
+            async with websockets.serve(self._api, host, port,
+                                        # just generate a new certificate every time.
+                                        # Hopefully this doesnt drain too much entropy
+                                        ssl=_use_selfsigned_ssl_cert(),
+                                        # allow for big images to be sent (<100MB)
+                                        max_size=100_000_000,
+                                        process_request=self._maybe_serve_static):
+                self._out.put("ready")
+                await self.stop_flag
 
         url = f"https://{_get_local_ip()}:{port}"
 
@@ -262,9 +265,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
             qrcode = pyqrcode.create(url.upper()).terminal()  # type: ignore
             print(f'Or scan the following QR Code: {qrcode}')
 
-        self._out.put("ready")
         self.loop.run_until_complete(_websocket_server())
-        self.loop.run_forever()
 
     async def _api(self, ws: WebSocketServerProtocol, path: str):
         ip = ws.local_address[0]

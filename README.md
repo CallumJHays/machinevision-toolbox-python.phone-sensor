@@ -34,7 +34,7 @@ plt.show()
 
 The above code will create an ASCII QRcode in your terminal. Scanning it with a smartphone will take you to a webapp hosted by the `PhoneSensor`, which looks like:
 
-![alt text](public/screenshot.png)
+![alt text](screenshot.png)
 
 The output `img` is a `width x height x 3` rgb `np.ndarray` like you'd expect from `machinevisiontoolbox` or `opencv-python`.
 

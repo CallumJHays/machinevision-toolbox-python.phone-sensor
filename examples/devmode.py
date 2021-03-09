@@ -37,3 +37,6 @@ while True:
 
     except PhoneSensor.ClientDisconnect:
         pass
+
+    finally:
+        phone.close()

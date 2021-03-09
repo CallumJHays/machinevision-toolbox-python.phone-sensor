@@ -3,7 +3,7 @@ from ansitable import ANSITable  # type: ignore
 import numpy as np  # type: ignore
 from typing import cast, Any
 
-phone = PhoneSensor(qrcode=True, proxy_client_from="localhost:3000")
+phone = PhoneSensor(qrcode=True)
 
 print("Timing Performance Validation\n")
 
@@ -44,5 +44,3 @@ for wait_s in [0.01, 0.1, 0.3, 0.5, 1]:
     imu_table.row(wait_s, times.mean(), np.median(times), times.min(), times.max(), times.std())  # type: ignore # nopep8
 
 imu_table.print()  # type: ignore
-
-phone.close()

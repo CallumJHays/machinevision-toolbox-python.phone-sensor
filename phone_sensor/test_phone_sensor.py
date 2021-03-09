@@ -1,5 +1,4 @@
 from http import HTTPStatus
-from http.client import HTTPResponse
 from phone_sensor import PhoneSensor
 import unittest
 from urllib.request import urlopen

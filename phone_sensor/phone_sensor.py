@@ -128,7 +128,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
              resolution: Tuple[int, int] = (640, 480),
              button: bool = False,
              wait: Optional[float] = None,
-             encoding: Literal['jpeg', 'png', 'webp', 'bmp'] = 'webp',
+             encoding: Literal['jpeg', 'png', 'webp', 'bmp'] = 'bmp',
              quality: int = 90,
              ) -> Tuple[np.ndarray, float]:
         """Grab an image from the first/currently connected webapp client
@@ -239,7 +239,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
     def _start_server(self, host: str, port: int):
         async def _websocket_server():
             # TODO: graceful shutdown https://stackoverflow.com/a/48825733/1266662
-            async with websockets.serve(self._api, host, port,
+            async with websockets.serve(self._api, host=host, port=port,
                                         # just generate a new certificate every time.
                                         # Hopefully this doesnt drain too much entropy
                                         ssl=_use_selfsigned_ssl_cert(),
@@ -249,14 +249,13 @@ class PhoneSensor(ContextManager['PhoneSensor']):
                 self._out.put("ready")
                 await self.stop_flag
 
-        url = f"https://{_get_local_ip()}:{port}"
+        url = f"https://{self._get_local_ip()}:{port}"
 
         # display cmdline connect msg
         BLUE = '\033[94m'
-        YELLOW = '\033[93m'
         UNDERLINE = '\033[4m'
         END = '\033[0m'
-        print(f"{YELLOW}Hosting 📷 app at 🌐 {END}{BLUE}{UNDERLINE}{url}{END}{END}")
+        print(f"Hosting 📷 app at 🌐 {BLUE}{UNDERLINE}{url}{END}{END}")
 
         # cmdline qr code if specified
         if self._qrcode:
@@ -370,6 +369,23 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         # if None is returned, will default to ws handler
         return None
 
+    def _get_local_ip(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # doesn't even have to be reachable
+            s.connect(('10.255.255.255', 1))
+            ip = s.getsockname()[0]
+        except Exception:
+
+            YELLOW = '\033[93m'
+            END = '\033[0m'
+            self.logger.warn(
+                f"{YELLOW}[WARN]: Couldn't find a local IP. Are you connected to a LAN? Falling back to loopback address{END}")
+            ip = '127.0.0.1'
+        finally:
+            s.close()
+        return ip
+
 
 # Adapted from https://docs.python.org/3/library/ssl.html#self-signed-certificates
 def _use_selfsigned_ssl_cert():
@@ -394,18 +410,3 @@ def _use_selfsigned_ssl_cert():
     ssl_context.load_cert_chain(certfile)  # type: ignore
 
     return ssl_context
-
-
-def _get_local_ip():
-    try:
-        # unreadable garbage but it works - https://stackoverflow.com/a/1267524/1266662
-        return (([
-            ip for ip in socket.gethostbyname_ex(socket.gethostname())[2]
-            if not ip.startswith("127.")
-        ] or [[
-            (s.connect(("8.8.8.8", 53)), s.getsockname()[0], s.close())
-            for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]
-        ][0][1]]) + ["no IP found"])[0]
-    except OSError as e:
-        raise OSError(
-            "Unable to find local IP. Are you connected to a LAN?") from e

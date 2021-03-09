@@ -9,6 +9,7 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
+
 def recursively_list_all_files(directory: str):
     paths = []
     for (path, _, filenames) in os.walk(directory):
@@ -16,14 +17,15 @@ def recursively_list_all_files(directory: str):
             paths.append(os.path.join('..', path, filename))
     return paths
 
+
 setup(
-    
-    name='machinevision-toolbox-python.phone-sensor', 
+
+    name='machinevision-toolbox-python.phone-sensor',
 
     version="0.2.8",
 
     description='PhoneSensor for machinevisiontoolbox. Get camera and IMU data from a camera remotely with Python',
-    
+
     long_description=long_description,
     long_description_content_type='text/markdown',
 
@@ -67,6 +69,12 @@ setup(
         '': recursively_list_all_files('phone_sensor/build')
     },
 
-    install_requires=['pyqrcode', 'websockets', 'numpy', 'typing_extensions']
-    
+    install_requires=['pyqrcode', 'websockets', 'numpy', 'typing_extensions'],
+
+    # either of these two for image decoding
+    extras_require={
+        'opencv': 'opencv-python',
+        'PIL': 'Pillow'
+    }
+
 )

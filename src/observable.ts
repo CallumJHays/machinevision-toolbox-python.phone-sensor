@@ -6,10 +6,12 @@ type Callback<T> = (state: T) => void;
 export class Observable<T> {
   state: T;
   callbacks: Callback<T>[];
+  private boundSet: Callback<T>;
 
   constructor(init: T, onChange: Callback<T> | null = null) {
     this.state = init;
     this.callbacks = onChange ? [onChange] : [];
+    this.boundSet = this.set.bind(this);
   }
 
   // register with react lifecycle
@@ -27,7 +29,7 @@ export class Observable<T> {
       return () => this.deRegister(setState);
     }, []);
 
-    return [state, this.set.bind(this)];
+    return [state, this.boundSet];
   }
 
   onChange(cb: Callback<T>) {

@@ -7,13 +7,12 @@ from typing import Any, ContextManager, Optional, NamedTuple, Union, Tuple, cast
 from typing_extensions import Literal
 import json
 import socket
-import struct
 from threading import Thread
 from queue import Queue
 import ssl
 import subprocess
 import pyqrcode  # type: ignore
-import dateutil.parser
+import struct
 import logging
 import websockets
 try:  # WebSocketException is not defined for ver<8 of websockets lib
@@ -25,6 +24,28 @@ from websockets.http import Headers
 from websockets.server import WebSocketServerProtocol
 import numpy as np  # type: ignore
 from urllib.error import URLError
+
+# try cv2 -> matplotlib -> Pillow
+try:
+    import cv2  # type: ignore
+
+    def imdecode(buf: bytes) -> np.ndarray:  # type: ignore
+        return cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)  # type: ignore # nopep8
+
+except ImportError:
+    try:
+        from matplotlib.pyplot import imread
+
+        def imdecode(buf: bytes) -> np.ndarray:  # type: ignore
+            return imread(BytesIO(buf))
+
+    except ImportError:
+        from PIL import Image
+        from io import BytesIO
+
+        def imdecode(buf: bytes) -> np.ndarray:
+            img = Image.open(BytesIO(buf))
+            return np.array(img)  # type: ignore
 
 
 class ImuDataFrame:
@@ -90,32 +111,43 @@ class PhoneSensor(ContextManager['PhoneSensor']):
 
     def grab(self,
              cam: Literal['front', 'back'] = 'back',
+             *,
+             resolution: Tuple[int, int] = (640, 480),
+             encoding: Literal['jpeg', 'png', 'webp', 'bmp'] = 'webp',
+             quality: int = 90,
              button: bool = False,
-             wait: Optional[float] = None
+             wait: Optional[float] = None,
              ) -> Tuple[np.ndarray, float]:
 
         assert not (wait is not None and button), \
             "`wait` argument cannot be used with `button=True`"
+        assert 0 <= quality <= 90
 
-        res = self._rpc(json.dumps({
+        data = self._rpc(json.dumps({
             'cmd': 'grab',
             'frontFacing': cam == 'front',
             'button': button,
-            'wait': wait
+            'wait': wait,
+            'resolution': resolution,
+            'encoding': encoding,
+            'quality': quality
         }))
 
-        assert isinstance(res, bytes)
-        # the first 24 bytes should be RFC3339 (ISO) date - convert to posix
-        # https://stackoverflow.com/a/969324/1266662
-        timestamp = dateutil.parser.parse(res[:24]).timestamp()
+        assert isinstance(data, bytes)
 
-        width, height = struct.unpack('<HH', res[24:28])
+        # first 4 bytes is the timestamp, followed by the encoded image data
+        timestamp: float = struct.unpack('L', data[:8])[0] / 1000.0
+        img = imdecode(data[8:])
 
-        # reshape the data and omit the unfortunate alpha channel
-        img = np.frombuffer(  # type: ignore
-            res[28:],
-            dtype=np.uint8
-        ).reshape((height, width, 4))[:, :, :3]  # unsure whether this is faster/slower than delete. think so
+        # old format without encoding; TODO: make this an option to this function
+        # width, height = struct.unpack('<HH', data[24:28])
+
+        # datahape the data and omit the unfortunate alpha channel
+
+        # img = np.frombuffer(  # type: ignore
+        #     data[28:],
+        #     dtype=np.uint8
+        # ).reshape((height, width, 4))[:, :, :3]  # unsure whether this is faster/slower than delete. think so
 
         return img, timestamp
 
@@ -242,7 +274,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
     #         if downstream in done:
     #             await from_.send(await downstream)
 
-    async def _maybe_serve_static(self, path: str, _headers: Headers):
+    async def _maybe_serve_static(self, path: str, _: Headers):
 
         # stolen from stackoverflow - lost link
         _extensions_map = {

@@ -6,6 +6,9 @@ type CameraGrabApiMsg = {
   frontFacing: boolean;
   button: boolean;
   wait: number | null;
+  encoding: string;
+  quality: number;
+  resolution: [w: number, h: number];
 };
 
 type ImuApiMsg = {
@@ -32,11 +35,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export type SendPhotoFunc = () => void;
+
 export class Api {
   waitingOnButton: Observable<boolean>;
-  sendPhotoFunc: Observable<((frontFacing: boolean) => void) | null>;
+  sendPhotoFunc: Observable<SendPhotoFunc | null>;
   imuRawData: Observable<number[][]>;
   imuDataFrame: Observable<ImuDataFrame>;
+  lastGrabCmd: Observable<CameraGrabApiMsg>;
   latestCmdTimestamps: {
     grab: number;
     imu: number;
@@ -58,6 +64,14 @@ export class Api {
       [0],
       [0],
     ]);
+    this.lastGrabCmd = new Observable({
+      frontFacing: false,
+      button: false,
+      wait: null,
+      encoding: "webp",
+      quality: 90,
+      resolution: [640, 480],
+    } as CameraGrabApiMsg);
     this.imuDataFrame = new Observable(
       {
         unixTimestamp: NaN,
@@ -95,17 +109,19 @@ export class Api {
     // different functionality based on api cmd
     switch (msg.cmd) {
       case "grab":
+        this.lastGrabCmd.set(msg);
+
         if (msg.button) {
           this.waitingOnButton.set(true);
         } else if (this.sendPhotoFunc.state !== null) {
           const sendPhoto = this.sendPhotoFunc.state;
-          this.latestCmdTimestamps["grab"] = Date.now();
-          sendPhoto(msg["frontFacing"]);
+          this.latestCmdTimestamps.grab = Date.now();
+          sendPhoto();
         } else {
           // queue a send once sendPhoto function has been set
-          const cb = (sendPhoto: ((frontFacing: boolean) => void) | null) => {
-            this.latestCmdTimestamps["grab"] = Date.now();
-            sendPhoto!(msg["frontFacing"]);
+          const cb = (sendPhoto: SendPhotoFunc | null) => {
+            this.latestCmdTimestamps.grab = Date.now();
+            sendPhoto!();
             this.sendPhotoFunc.deRegister(cb);
           };
           this.sendPhotoFunc.onChange(cb);

@@ -6,7 +6,7 @@ import Quaternion from "quaternion";
 import unwrap from "ts-unwrap";
 import "md-gum-polyfill"; // get videostream working on more browsers
 
-import { useApi, Api } from "./api";
+import { useApi, Api, SendPhotoFunc } from "./api";
 import { SignalScopeChart } from "./SignalScopeChart";
 
 const KEEP_LAST_SECS_IMU_DATA = 5;
@@ -20,60 +20,82 @@ function MainUI({ api }: { api: Api }) {
   ] = api.waitingOnButton.useState();
   const [showImuData, setShowImuData] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [frontCamera, setFrontCamera] = useState(true);
+  const [frontCamera, setFrontCamera] = useState<boolean | null>(null);
+  const [
+    {
+      frontFacing: defaultFrontFacing,
+      resolution: [width, height],
+      quality,
+      encoding,
+    },
+  ] = api.lastGrabCmd.useState();
 
-  const sendPhoto = useCallback(() => {
+  const sendPhoto: SendPhotoFunc = useCallback(async () => {
     const canvas = unwrap(canvasRef.current);
     const video = unwrap(videoRef.current);
     setWaitingForButton(false);
 
-    const w = (canvas.width = video.videoWidth);
-    const h = (canvas.height = video.videoHeight);
+    // the video is in a reload state (due to changing stream constraints.).
+    // use a dirty hack
+    if (video.videoHeight === 0) {
+      const before = video.oncanplay;
+      await new Promise((resolve) => {
+        video.oncanplay = resolve;
+      });
+      video.oncanplay = before;
+    }
+
+    if (canvas.width !== video.videoWidth) {
+      canvas.width = video.videoWidth;
+    }
+    if (canvas.height !== video.videoHeight) {
+      canvas.height = video.videoHeight;
+    }
     const ctx = unwrap(canvas.getContext("2d"));
-    // always 24 chars wide - convert to POSIX on backend
-    const timestamp = new Date().toISOString();
+    const timestamp = Date.now();
 
+    // draw to the canvas and encode it as the desired image type/quality
+    // yes, this is the only way to do it right now.
     ctx.drawImage(video, 0, 0);
-    const imgdata = ctx.getImageData(0, 0, w, h).data;
 
-    api.send(new Blob([timestamp, new Uint16Array([w, h]), imgdata]));
-  }, [api, setWaitingForButton]);
+    console.log({ encoding, quality, canvas, video });
+
+    canvas.toBlob(
+      (data: Blob | null) => {
+        api.send(
+          new Blob([new BigUint64Array([BigInt(timestamp)]), unwrap(data)])
+        );
+      },
+      `image/${encoding}`,
+      quality
+    );
+  }, [api, setWaitingForButton, quality, encoding]);
 
   useEffect(() => {
     const video = unwrap(videoRef.current);
 
-    (async function startLiveStream() {
-      video.srcObject = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: frontCamera ? "user" : "environment",
+    const constraints = {
+      video: {
+        facingMode: frontCamera ?? defaultFrontFacing ? "user" : "environment",
+        width,
+        height,
+      },
+    };
 
-          width: {
-            min: 1280,
-            ideal: 1920,
-            max: 2560,
-          },
-
-          height: {
-            min: 720,
-            ideal: 1080,
-            max: 1440,
-          },
-        },
-      });
+    (async function updateLiveStream() {
+      if (video.srcObject === null) {
+        video.srcObject = await navigator.mediaDevices.getUserMedia(
+          constraints
+        );
+      } else {
+        await (video.srcObject as MediaStream)
+          .getVideoTracks()[0]
+          .applyConstraints(constraints.video);
+      }
     })();
 
-    // wait for the first frame to load before letting api know we're good to send photos
-    video.onloadeddata = () => api.sendPhotoFunc.set(sendPhoto);
-
-    // stop all tracks on cleanup
-    return () => {
-      if (video.srcObject instanceof MediaStream) {
-        for (const track of video.srcObject.getTracks()) {
-          track.stop();
-        }
-      }
-    };
-  }, [api, sendPhoto, frontCamera]);
+    // maybe TODO: cleanup stream
+  }, [api, frontCamera, defaultFrontFacing, width, height]);
 
   useEffect(() => {
     (async function setupSensors() {
@@ -186,6 +208,10 @@ function MainUI({ api }: { api: Api }) {
       <video
         ref={videoRef}
         autoPlay
+        onCanPlay={() => {
+          console.log("canplay");
+          api.sendPhotoFunc.set(sendPhoto);
+        }}
         style={{ maxWidth: "100%", maxHeight: "100%", margin: "0 auto" }}
       />
       {/* canvas required for screenshot (MediaStreamCapture API not available in most mobile browsers) */}
@@ -280,7 +306,7 @@ function MainUI({ api }: { api: Api }) {
                 Use front-facing camera?
                 <Switch
                   onChange={setFrontCamera}
-                  checked={frontCamera}
+                  checked={frontCamera ?? true} // TODO: this!!
                   height={30}
                   width={60}
                 />

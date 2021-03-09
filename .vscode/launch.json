@@ -35,6 +35,14 @@
       "request": "launch",
       "url": "https://localhost:8000",
       "webRoot": "${workspaceRoot}/src"
+    },
+    {
+      "name": "Firefox",
+      "type": "firefox",
+      "request": "launch",
+      "reAttach": true,
+      "url": "https://localhost:8000",
+      "webRoot": "${workspaceRoot}/src"
     }
   ]
 }

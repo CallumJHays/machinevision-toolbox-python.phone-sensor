@@ -22,7 +22,7 @@ setup(
 
     name='machinevision-toolbox-python.phone-sensor',
 
-    version="0.2.8",
+    version="0.2.9",
 
     description='PhoneSensor for machinevisiontoolbox. Get camera and IMU data from a camera remotely with Python',
 

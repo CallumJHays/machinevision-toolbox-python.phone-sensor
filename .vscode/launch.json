@@ -9,13 +9,6 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Python: Current File",
-      "type": "python",
-      "request": "launch",
-      "program": "${file}",
-      "console": "integratedTerminal"
-    },
-    {
       "name": "Examples/Timing",
       "type": "python",
       "request": "launch",

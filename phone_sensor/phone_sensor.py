@@ -82,12 +82,24 @@ class PhoneSensor(ContextManager['PhoneSensor']):
     ImuDataFrame = ImuDataFrame
 
     def __init__(self,
+                 *,
                  qrcode: bool = False,
-                 proxy_client_from: Optional[str] = None,
                  host: str = "0.0.0.0",
                  port: int = 8000,
                  logger: logging.Logger = logging.getLogger('mvt.phone_sensor'),
-                 log_level: int = logging.WARN):
+                 log_level: int = logging.WARN,
+                 proxy_client_from: Optional[str] = None):
+        """Initialize a `PhoneSensor` object
+
+        :param qrcode: True to output a QRCode in the terminal window that points to the server accessible via LAN, defaults to False
+        :param host: Which hostname/ip to host the server on, defaults to "0.0.0.0"
+        :param port: Which port to host the server on, defaults to 8000
+        :param logger: A standard `logging.Logger` for debugging and general log information, defaults to logging.getLogger('mvt.phone_sensor')
+        :param log_level: Log level for the aforementioned logger, defaults to logging.WARN
+        :param proxy_client_from: A separate host from which to proxy the web client, defaults to None.
+            Mainly for development purposes, using a hot-reloaded webpack server for the client
+            rather than the one shipped with your `pip install`
+        """
 
         self._ws: Optional[websockets.WebSocketServerProtocol] = None
         self._in: Queue[str] = Queue()
@@ -113,11 +125,36 @@ class PhoneSensor(ContextManager['PhoneSensor']):
              cam: Literal['front', 'back'] = 'back',
              *,
              resolution: Tuple[int, int] = (640, 480),
-             encoding: Literal['jpeg', 'png', 'webp', 'bmp'] = 'webp',
-             quality: int = 90,
              button: bool = False,
              wait: Optional[float] = None,
+             encoding: Literal['jpeg', 'png', 'webp', 'bmp'] = 'webp',
+             quality: int = 90,
              ) -> Tuple[np.ndarray, float]:
+        """Grab an image from the first/currently connected webapp client
+
+        :param cam: Default camera to use, defaults to 'back'.
+            Most smartphones have a 'front' (the side with the touchscreen) and a 'back' camera.
+            This may be temporarily overridden through the menu on the client.
+        :param resolution: The desired resolution (width, height) of the photo, defaults to (640, 480).
+            Choosing lower values will increase performance, allowing you to take more photos in quicker succession.
+            Note this is not necessarily respected - It's up to the browser's implementation which resolution
+            it chooses, with this value being the 'ideal'. For example, if you ask for (999999, 480)
+            the browser might choose (640, 480) instead.
+        :param button: True to wait for button press, defaults to False.
+        :param wait: Minimum amount of time to wait since previous photo before taking a new one, defaults to None.
+            Incompatible with the `button` arg.
+        :param encoding: The encoding mimetype for the image, defaults to 'webp'.
+            In order of most to least performance, the recommended options are: ['webp', 'jpeg', 'png', 'bmp'].
+            'webp' and 'jpeg' are lossy compressions, so they will have differing compression artifacts.
+            'png' and 'bmp' are lossless. 'bmp' is essentially "no encoding" so you may use this if
+            network is not a bottleneck (which it typically is). Otherwise 'png' is also lossless.
+        :param quality: The quality (within (0, 100]) at which to encode the image, defaults to 90.
+            Lower may slightly increase performance at the cost of image quality, however,
+            the effect is typically insignificant. Does nothing for lossless encodings such as 'png'.
+        :return: An `(img, timestamp)` tuple,
+            where `img` is a `numpy.ndarray` in the format you would expect from OpenCV (h x w x rgb)
+            and `timestamp` is a unix timestamp from the client device (seconds since epoch)
+        """
 
         assert not (wait is not None and button), \
             "`wait` argument cannot be used with `button=True`"
@@ -152,6 +189,15 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         return img, timestamp
 
     def imu(self, wait: Optional[float] = None) -> ImuDataFrame:  # type: ignore
+        """Retrieve orientation and motion data from a capable device.
+
+        :param wait: Minimum amount of time to wait since previous reading before taking a new one, defaults to None.
+        :raises DataUnavailable: Raised if the device is incapable of providing the data (eg. desktop pc),
+            or if the browser disallows it, either due to app permissions or if it does not support the features.
+        :return: An ImuDataFrame, with the orientation as a quaternion tuply and raw accelerometer, magnetometer and
+            gyroscope tuples if supported by the browser (generally only new versions of Android Chrome).
+            Also includes the timestamp (seconds since epoch) at which the last quaternion reading was made.
+        """
         resp = json.loads(self._rpc(json.dumps({
             'cmd': 'imu',
             'wait': wait
@@ -173,6 +219,10 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         return frame
 
     def close(self):
+        """Close the server and relinquish control of the port.
+        Use of `PhoneSensor` as a context manager is preferred to this, where possible.
+        May be called automatically by the garbage collector.
+        """
         self.loop.close()
         self.server_thread.join()
 
@@ -191,7 +241,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
             await websockets.serve(self._api, host, port,
                                    # just generate a new certificate every time.
                                    # Hopefully this doesnt drain too much entropy
-                                   ssl=use_selfsigned_ssl_cert(),
+                                   ssl=_use_selfsigned_ssl_cert(),
                                    # allow for big images to be sent (<100MB)
                                    max_size=100_000_000,
                                    process_request=self._maybe_serve_static, loop=self.loop)
@@ -321,7 +371,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
 
 
 # Adapted from https://docs.python.org/3/library/ssl.html#self-signed-certificates
-def use_selfsigned_ssl_cert():
+def _use_selfsigned_ssl_cert():
 
     # Generation probably isn't required.
     # Reusing the same one is fine as they only need be unique for each domain name
@@ -355,5 +405,6 @@ def _get_local_ip():
             (s.connect(("8.8.8.8", 53)), s.getsockname()[0], s.close())
             for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]
         ][0][1]]) + ["no IP found"])[0]
-    except OSError:
-        return 'localhost'  # probably not connected to a LAN
+    except OSError as e:
+        raise OSError(
+            "Unable to find local IP. Are you connected to a LAN?") from e

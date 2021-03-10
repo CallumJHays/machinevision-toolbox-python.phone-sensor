@@ -405,14 +405,13 @@ def _use_selfsigned_ssl_cert():
     # Reusing the same one is fine as they only need be unique for each domain name
     # which is n/a for us as we use IP addresses
     certfile = Path(__file__).parent / 'ssl-cert.pem'
-    if not certfile.exists():
-        raise Exception("FUCK")
-        subprocess.check_call(
-            'openssl req -new -x509 -days 365 -nodes \
-                -out {0} \
-                -keyout {0} \
-                -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=*"'
-            .format(certfile), shell=True, stderr=subprocess.DEVNULL)
+    # if not certfile.exists():
+    #     subprocess.check_call(
+    #         'openssl req -new -x509 -days 365 -nodes \
+    #             -out {0} \
+    #             -keyout {0} \
+    #             -subj "/C=RO/ST=Bucharest/L=Bucharest/O=IT/CN=*"'
+    #         .format(certfile), shell=True, stderr=subprocess.DEVNULL)
 
     # keyfile not needed
     # with NamedTemporaryFile('r') as key_file:

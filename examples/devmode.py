@@ -1,10 +1,16 @@
+import logging
 from phone_sensor import PhoneSensor
 from matplotlib import pyplot as plt
 
 # proxy from the dev server
 phone = PhoneSensor(
+    port=8080,
     proxy_client_from='localhost:3000',
     qrcode=True)
+
+logger = logging.getLogger('websockets')
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler())
 
 while True:
     try:
@@ -38,5 +44,6 @@ while True:
     except PhoneSensor.ClientDisconnect:
         pass
 
-    finally:
+    except Exception as e:
         phone.close()
+        raise e

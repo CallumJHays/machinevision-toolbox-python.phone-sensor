@@ -39,7 +39,6 @@ export function SignalScopeChart({ scope }: { scope: SignalScope }) {
     const container = containerRef.current;
     if (chartRef.current) {
       chartRef.current.setData(data as any);
-      //   console.log("setData", data);
     } else if (container && !chartRef.current) {
       const uplot = (chartRef.current = new uPlot(
         {

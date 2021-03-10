@@ -13,3 +13,5 @@ plt.subplot(1, 2, 2)
 plt.bar(['x', 'y', 'z', 'w'], quaternion)  # type: ignore
 
 plt.show()
+
+phone.close()

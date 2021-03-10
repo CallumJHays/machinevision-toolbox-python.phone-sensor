@@ -74,7 +74,8 @@ setup(
     # either of these two for image decoding
     extras_require={
         'opencv': 'opencv-python',
-        'PIL': 'Pillow'
+        'PIL': 'Pillow',
+        'matplotlib': 'matplotlib'
     }
 
 )

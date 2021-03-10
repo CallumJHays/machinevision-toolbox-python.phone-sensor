@@ -35,9 +35,9 @@ function MainUI({ api }: { api: Api }) {
     const video = unwrap(videoRef.current);
     setWaitingForButton(false);
 
+    if (video.videoHeight === 0) {
     // the video is in a reload state (due to changing stream constraints.).
     // use a dirty hack
-    if (video.videoHeight === 0) {
       const before = video.oncanplay;
       await new Promise((resolve) => {
         video.oncanplay = resolve;
@@ -57,8 +57,6 @@ function MainUI({ api }: { api: Api }) {
     // draw to the canvas and encode it as the desired image type/quality
     // yes, this is the only way to do it right now.
     ctx.drawImage(video, 0, 0);
-
-    console.log({ encoding, quality, canvas, video });
 
     canvas.toBlob(
       (data: Blob | null) => {
@@ -209,7 +207,6 @@ function MainUI({ api }: { api: Api }) {
         ref={videoRef}
         autoPlay
         onCanPlay={() => {
-          console.log("canplay");
           api.sendPhotoFunc.set(sendPhoto);
         }}
         style={{ maxWidth: "100%", maxHeight: "100%", margin: "0 auto" }}
@@ -224,7 +221,7 @@ function MainUI({ api }: { api: Api }) {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          height: "100%",
+          height: "100vh",
           width: "100%",
         }}
       >
@@ -340,6 +337,7 @@ function MainUI({ api }: { api: Api }) {
               width: 90,
               fontSize: 32,
               margin: 10,
+              marginBottom: 50,
               alignSelf: "center",
             }}
             disabled={!waitingForButton}

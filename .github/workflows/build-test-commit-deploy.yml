@@ -45,11 +45,14 @@ jobs:
           npm install
           npm run build
 
+      - name: Run Tests
+        run: python -m unittest discover phone_sensor
+
       - uses: EndBug/add-and-commit@v7 # You can change this to use a specific version
         with:
           # The arguments for the `git add` command (see the paragraph below for more info)
           # Default: '.'
-          add: '["phone_sensor/build --force", "."]'
+          add: '["phone_sensor/js_client --force", "."]'
 
           # The message for the commit
           # Default: 'Commit from GitHub Actions (name of the workflow)'
@@ -73,7 +76,7 @@ jobs:
           git config user.email "callumjhays@gmail.com"
           bump2version patch --commit --tag \
             --current-version $(git describe --tags --abbrev=0) \
-            setup.py
+            setup.py docs/conf.py
           # https://stackoverflow.com/questions/58033366/how-to-get-current-branch-within-github-actions/58035262
           git push --atomic origin ${GITHUB_REF##*/} $(git describe --tags --abbrev=0)
 

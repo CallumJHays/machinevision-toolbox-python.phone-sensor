@@ -49,22 +49,11 @@ except ImportError:
 
 
 class ImuDataFrame:
-    class XyzTuple(NamedTuple):
-        x: float
-        y: float
-        z: float
-
-    class Quaternion(NamedTuple):
-        x: float
-        y: float
-        z: float
-        w: float
-
     unix_timestamp: float
-    quaternion: Quaternion
-    accelerometer: Optional[XyzTuple]
-    gyroscope: Optional[XyzTuple]
-    magnetometer: Optional[XyzTuple]
+    quaternion: Tuple[float, float, float, float]
+    accelerometer: Optional[Tuple[float, float, float, float]]
+    gyroscope: Optional[Tuple[float, float, float, float]]
+    magnetometer: Optional[Tuple[float, float, float, float]]
 
 
 class ClientDisconnect(Exception):
@@ -76,10 +65,6 @@ class DataUnavailable(Exception):
 
 
 class PhoneSensor(ContextManager['PhoneSensor']):
-
-    ClientDisconnect = ClientDisconnect
-    DataUnavailable = DataUnavailable
-    ImuDataFrame = ImuDataFrame
 
     def __init__(self,
                  *,
@@ -102,7 +87,6 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         """
 
         self._ws: Optional[websockets.WebSocketServerProtocol] = None
-        self._in: Queue[str] = Queue()
         self._out: Queue[Union[websockets.Data, ClientDisconnect]] = Queue()
         self._waiting = False
         self._qrcode = qrcode
@@ -111,6 +95,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         self.logger.setLevel(log_level)
         self.client_connected = False
         self.loop = asyncio.new_event_loop()
+        self._in: asyncio.Queue[str] = asyncio.Queue(loop=self.loop)
         self.stop_flag = self.loop.create_future()
 
         self.server_thread = Thread(target=self._start_server,
@@ -128,7 +113,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
              resolution: Tuple[int, int] = (640, 480),
              button: bool = False,
              wait: Optional[float] = None,
-             encoding: Literal['jpeg', 'png', 'webp', 'bmp'] = 'bmp',
+             encoding: Literal['jpeg', 'png', 'webp', 'bmp'] = 'webp',
              quality: int = 90,
              ) -> Tuple[np.ndarray, float]:
         """Grab an image from the first/currently connected webapp client
@@ -152,6 +137,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         :param quality: The quality (within (0, 100]) at which to encode the image, defaults to 90.
             Lower may slightly increase performance at the cost of image quality, however,
             the effect is typically insignificant. Does nothing for lossless encodings such as 'png'.
+        :raises PhoneSensor.ClientDisconnect: If the device disconnects from the app after receiving the command.
         :return: An `(img, timestamp)` tuple,
             where `img` is a `numpy.ndarray` in the format you would expect from OpenCV (h x w x rgb)
             and `timestamp` is a unix timestamp from the client device (seconds since epoch)
@@ -174,7 +160,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         assert isinstance(data, bytes)
 
         # first 4 bytes is the timestamp, followed by the encoded image data
-        timestamp: float = struct.unpack('L', data[:8])[0] / 1000.0
+        timestamp: float = struct.unpack('Q', data[:8])[0] / 1000.0
         img = imdecode(data[8:])
 
         # old format without encoding; TODO: make this an option to this function
@@ -193,7 +179,8 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         """Retrieve orientation and motion data from a capable device.
 
         :param wait: Minimum amount of time to wait since previous reading before taking a new one, defaults to None.
-        :raises DataUnavailable: Raised if the device is incapable of providing the data (eg. desktop pc),
+        :raises PhoneSensor.ClientDisconnect: If the device disconnects from the app after receiving the command.
+        :raises PhoneSensor.DataUnavailable: if the device is incapable of providing the data (eg. desktop pc),
             or if the browser disallows it, either due to app permissions or if it does not support the features.
         :return: An ImuDataFrame, with the orientation as a quaternion tuply and raw accelerometer, magnetometer and
             gyroscope tuples if supported by the browser (generally only new versions of Android Chrome).
@@ -209,27 +196,23 @@ class PhoneSensor(ContextManager['PhoneSensor']):
 
         frame = ImuDataFrame()
         frame.unix_timestamp = resp['unixTimestamp']
-        frame.accelerometer = ImuDataFrame.XyzTuple(*resp['accelerometer']) \
-            if 'accelerometer' in resp else None
-        frame.gyroscope = ImuDataFrame.XyzTuple(*resp['gyroscope']) \
-            if 'gyroscope' in resp else None
-        frame.magnetometer = ImuDataFrame.XyzTuple(*resp['magnetometer']) \
-            if 'magnetometer' in resp else None
-        frame.quaternion = ImuDataFrame.Quaternion(*resp['quaternion'])
+        frame.quaternion = tuple(resp['quaternion'])
+        for reading in ['accelerometer', 'gyroscope', 'magnetometer']:
+            setattr(frame, reading, tuple(resp[reading]) if reading in resp else None)
 
         return frame
 
     def close(self):
         """Close the server and relinquish control of the port.
-        Use of `PhoneSensor` as a context manager is preferred to this, where possible.
+        Use of `PhoneSensor` as a context manager is preferred to this, where suitable.
         May be called automatically by the garbage collector.
         """
-        self.loop.call_soon_threadsafe(self.stop_flag.set_result, None)
+        self.loop.call_soon_threadsafe(self.stop_flag.set_result, True)
         self.server_thread.join()
 
     def _rpc(self, cmd: str):
         self._waiting = True
-        self._in.put(cmd)
+        asyncio.run_coroutine_threadsafe(self._in.put(cmd), self.loop)
         res = self._out.get()
         self._waiting = False
         if isinstance(res, ClientDisconnect):
@@ -295,16 +278,27 @@ class PhoneSensor(ContextManager['PhoneSensor']):
 
         self._ws = ws
 
+        async def request_response():
+            cmd = await self._in.get()
+            await ws.send(cmd)
+            res = await ws.recv()
+            self._out.put(res)
+
         try:
             while True:
-                cmd = self._in.get()
-                await ws.send(cmd)
-                res = await ws.recv()
-                self._out.put(res)
+                req_res = asyncio.create_task(request_response())
+                _, pending = await asyncio.wait({ req_res, self.stop_flag },
+                                   return_when=asyncio.FIRST_COMPLETED)
 
-        except WebSocketException:
-            self._out.put(ClientDisconnect(f"Client from {ip} disconnected"))
+                if req_res in pending:
+                    # stop_flag mustve been set
+                    req_res.cancel()
+                    break
+
+        except WebSocketException as e:
             self.client_connected = False
+            self._out.put(ClientDisconnect(f"Client from {ip} disconnected:"))
+            raise e
 
     # for proxying the webpack websocket to the webpack dev server
     #  Doesn't seem to work :(
@@ -385,6 +379,10 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         finally:
             s.close()
         return ip
+
+    ClientDisconnect = ClientDisconnect
+    DataUnavailable = DataUnavailable
+    ImuDataFrame = ImuDataFrame
 
 
 # Adapted from https://docs.python.org/3/library/ssl.html#self-signed-certificates

@@ -57,7 +57,9 @@ The output `img` is a `width x height x 3` BGR `np.ndarray` like you'd expect fr
 ```python
 class phone_sensor.PhoneSensor(): ...
 
-def PhoneSensor.__init__(self, *, qrcode=False, host='0.0.0.0', port=8000, logger=logging.getLogger('mvt.phone_sensor'), log_level=30, proxy_client_from=None)
+def PhoneSensor.__init__(self, *, qrcode=False, host='0.0.0.0', port=8000,
+                         logger=logging.getLogger('mvt.phone_sensor'), log_level=30,
+                         proxy_client_from=None)
 ```
 
 * **Parameters**
@@ -96,7 +98,8 @@ May be called automatically by the garbage collector.
 ### PhoneSensor.grab()
 
 ```python
-def PhoneSensor.grab(self, cam='back', *, resolution=(640, 480), button=False, wait=None, encoding='webp', quality=90) -> Tuple[np.ndarray, float]
+def PhoneSensor.grab(self, cam='back', *, resolution=(640, 480), button=False, wait=None,
+                     encoding='webp', quality=90) -> Tuple[np.ndarray, float]
 ```
 Grab an image from the first/currently connected webapp client
 

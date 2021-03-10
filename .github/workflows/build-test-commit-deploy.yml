@@ -48,6 +48,7 @@ jobs:
       - name: Run Tests
         run: |
           pip install .
+          pip install -r requirements.txt
           python -m unittest discover phone_sensor
 
       - uses: EndBug/add-and-commit@v7 # You can change this to use a specific version

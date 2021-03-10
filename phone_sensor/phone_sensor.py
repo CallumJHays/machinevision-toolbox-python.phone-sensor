@@ -37,7 +37,7 @@ except ImportError:
         from matplotlib.pyplot import imread
 
         def imdecode(buf: bytes) -> np.ndarray:  # type: ignore
-            return imread(BytesIO(buf))
+            return np.flip(imread(BytesIO(buf)), axis=2)  # RGB2BGR
 
     except ImportError:
         from PIL import Image
@@ -45,7 +45,8 @@ except ImportError:
 
         def imdecode(buf: bytes) -> np.ndarray:
             img = Image.open(BytesIO(buf))
-            return np.array(img)  # type: ignore
+            # RGB2BGR
+            return np.flip(np.array(img))  # type: ignore
 
 
 class ImuDataFrame:
@@ -71,7 +72,8 @@ class PhoneSensor(ContextManager['PhoneSensor']):
                  qrcode: bool = False,
                  host: str = "0.0.0.0",
                  port: int = 8000,
-                 logger: logging.Logger = logging.getLogger('mvt.phone_sensor'),
+                 logger: logging.Logger = logging.getLogger(
+                     'mvt.phone_sensor'),
                  log_level: int = logging.WARN,
                  proxy_client_from: Optional[str] = None):
         """Initialize a `PhoneSensor` object
@@ -198,7 +200,8 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         frame.unix_timestamp = resp['unixTimestamp']
         frame.quaternion = tuple(resp['quaternion'])
         for reading in ['accelerometer', 'gyroscope', 'magnetometer']:
-            setattr(frame, reading, tuple(resp[reading]) if reading in resp else None)
+            setattr(frame, reading, tuple(
+                resp[reading]) if reading in resp else None)
 
         return frame
 
@@ -287,8 +290,8 @@ class PhoneSensor(ContextManager['PhoneSensor']):
         try:
             while True:
                 req_res = asyncio.create_task(request_response())
-                _, pending = await asyncio.wait({ req_res, self.stop_flag },
-                                   return_when=asyncio.FIRST_COMPLETED)
+                _, pending = await asyncio.wait({req_res, self.stop_flag},
+                                                return_when=asyncio.FIRST_COMPLETED)
 
                 if req_res in pending:
                     # stop_flag mustve been set

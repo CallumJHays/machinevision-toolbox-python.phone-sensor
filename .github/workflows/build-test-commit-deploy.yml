@@ -77,7 +77,7 @@ jobs:
           git fetch --depth=500 # https://stackoverflow.com/a/45993185/1266662
           git config user.name "GH Actions CI"
           git config user.email "callumjhays@gmail.com"
-          npm version patch --no-git-tag-version
+          npm version patch -f --no-git-tag-version
           bump2version patch --commit --tag \
             --current-version $(git describe --tags --abbrev=0) \
             setup.py

@@ -3,7 +3,7 @@ from http import HTTPStatus
 from http.client import HTTPResponse
 from pathlib import Path
 from urllib.request import urlopen
-from typing import Any, ContextManager, Optional, NamedTuple, Union, Tuple, cast
+from typing import Any, ContextManager, Optional, Union, Tuple, cast
 from typing_extensions import Literal
 import json
 import socket
@@ -25,28 +25,38 @@ from websockets.server import WebSocketServerProtocol
 import numpy as np  # type: ignore
 from urllib.error import URLError
 
+def drop_alpha_channel(img: np.ndarray):
+    return img if img.shape[2] == 3 else img[:, :, :3]
+    
 # try cv2 -> matplotlib -> Pillow
 try:
     import cv2  # type: ignore
 
     def imdecode(buf: bytes) -> np.ndarray:  # type: ignore
-        return cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)  # type: ignore # nopep8
+        img: np.ndarray = cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR) # type: ignore # nopep8
+        img = drop_alpha_channel(img)
+        return img 
 
 except ImportError:
     try:
         from matplotlib.pyplot import imread
+        from io import BytesIO
 
+        # pretty sure matplotlib just uses PIL under the hood, oh well:
         def imdecode(buf: bytes) -> np.ndarray:  # type: ignore
-            return np.flip(imread(BytesIO(buf)), axis=2)  # RGB2BGR
+            img = drop_alpha_channel(imread(BytesIO(buf)))
+            # RGB2BGR
+            return np.flip(img, axis=2) # type: ignore
 
     except ImportError:
         from PIL import Image
         from io import BytesIO
 
         def imdecode(buf: bytes) -> np.ndarray:
-            img = Image.open(BytesIO(buf))
+            img = np.array(Image.open(BytesIO(buf))) # type: ignore
+            img = drop_alpha_channel(img)
             # RGB2BGR
-            return np.flip(np.array(img))  # type: ignore
+            return np.flip(img, axis=2)  # type: ignore
 
 
 class ImuDataFrame:
@@ -396,6 +406,7 @@ def _use_selfsigned_ssl_cert():
     # which is n/a for us as we use IP addresses
     certfile = Path(__file__).parent / 'ssl-cert.pem'
     if not certfile.exists():
+        raise Exception("FUCK")
         subprocess.check_call(
             'openssl req -new -x509 -days 365 -nodes \
                 -out {0} \

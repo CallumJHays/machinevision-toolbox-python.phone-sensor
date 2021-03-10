@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 
 # proxy from the dev server
 phone = PhoneSensor(
-    port=8080,
+    port=8000,
     proxy_client_from='localhost:3000',
     qrcode=True)
 
@@ -38,7 +38,7 @@ while True:
 
         plt.figure()
         plt.title("phone.grab: " + str(timestamp))  # type: ignore
-        plt.imshow(img)  # type: ignore
+        plt.imshow(np.flip(img, axis=2))  # type: ignore
         plt.show()
 
     except PhoneSensor.ClientDisconnect:

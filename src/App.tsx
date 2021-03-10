@@ -36,8 +36,8 @@ function MainUI({ api }: { api: Api }) {
     setWaitingForButton(false);
 
     if (video.videoHeight === 0) {
-    // the video is in a reload state (due to changing stream constraints.).
-    // use a dirty hack
+      // the video is in a reload state (due to changing stream constraints.).
+      // use a dirty hack
       const before = video.oncanplay;
       await new Promise((resolve) => {
         video.oncanplay = resolve;
@@ -86,9 +86,19 @@ function MainUI({ api }: { api: Api }) {
           constraints
         );
       } else {
-        await (video.srcObject as MediaStream)
-          .getVideoTracks()[0]
-          .applyConstraints(constraints.video);
+        const track = await (video.srcObject as MediaStream).getVideoTracks()[0];
+
+        if (
+          track.getConstraints().facingMode !== constraints.video.facingMode
+        ) {
+          // applyConstraints will not switch the stream source (camera), so we need to open another one.
+
+          video.srcObject = await navigator.mediaDevices.getUserMedia(
+            constraints
+          );
+        } else {
+          track.applyConstraints(constraints.video);
+        }
       }
     })();
 

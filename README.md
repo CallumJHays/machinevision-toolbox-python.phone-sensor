@@ -9,7 +9,7 @@ For best results, use with the latest possible version of Chrome on Android.
 Install with `pip`:
 
 ```bash
-pip install -U machinevision-toolbox-python.phone-sensor
+pip install -U --force-reinstall machinevision-toolbox-python.phone-sensor
 ```
 
 Example Code:

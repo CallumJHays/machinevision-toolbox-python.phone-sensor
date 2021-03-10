@@ -66,7 +66,7 @@ setup(
 
     include_package_data=True,
     package_data={
-        '': recursively_list_all_files('phone_sensor/build')
+        '': recursively_list_all_files('phone_sensor/js_client') + ['ssl-cert.pem']
     },
 
     install_requires=['pyqrcode', 'websockets', 'numpy', 'typing_extensions'],

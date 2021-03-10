@@ -1,6 +1,3 @@
-# prod build
-js_client
-
 # dependencies
 /node_modules
 /.pnp

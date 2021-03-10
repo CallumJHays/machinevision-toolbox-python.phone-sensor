@@ -78,7 +78,7 @@ jobs:
           git config user.name "GH Actions CI"
           git config user.email "callumjhays@gmail.com"
           npm version patch -f --no-git-tag-version
-          bump2version patch --commit --tag -allow-dirty\
+          bump2version patch --commit --tag --allow-dirty\
             --current-version $(git describe --tags --abbrev=0) \
             setup.py
           # https://stackoverflow.com/questions/58033366/how-to-get-current-branch-within-github-actions/58035262

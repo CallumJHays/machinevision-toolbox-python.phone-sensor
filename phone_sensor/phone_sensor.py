@@ -299,7 +299,7 @@ class PhoneSensor(ContextManager['PhoneSensor']):
 
         try:
             while True:
-                req_res = asyncio.create_task(request_response())
+                req_res = self.loop.create_task(request_response())
                 _, pending = await asyncio.wait({req_res, self.stop_flag},
                                                 return_when=asyncio.FIRST_COMPLETED)
 

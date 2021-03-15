@@ -62,9 +62,9 @@ except ImportError:
 class ImuDataFrame:
     unix_timestamp: float
     quaternion: Tuple[float, float, float, float]
-    accelerometer: Optional[Tuple[float, float, float, float]]
-    gyroscope: Optional[Tuple[float, float, float, float]]
-    magnetometer: Optional[Tuple[float, float, float, float]]
+    accelerometer: Optional[Tuple[float, float, float]]
+    gyroscope: Optional[Tuple[float, float, float]]
+    magnetometer: Optional[Tuple[float, float, float]]
 
 
 class ClientDisconnect(Exception):

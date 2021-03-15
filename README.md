@@ -190,9 +190,9 @@ class PhoneSensor.ImuDataFrame:
     unix_timestamp: float
     quaternion: Tuple[float, float, float, float] # (x, y, z, w)
     # if supported by the browser (rare)
-    accelerometer: Optional[Tuple[float, float, float, float]] # (x, y, z)
-    gyroscope: Optional[Tuple[float, float, float, float]] # (x, y, z)
-    magnetometer: Optional[Tuple[float, float, float, float]] # (x, y, z)
+    accelerometer: Optional[Tuple[float, float, float]] # (x, y, z)
+    gyroscope: Optional[Tuple[float, float, float]] # (x, y, z)
+    magnetometer: Optional[Tuple[float, float, float]] # (x, y, z)
 
 ```
 

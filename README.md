@@ -68,7 +68,7 @@ The output `img` is a `width x height x 3` BGR `np.ndarray` like you'd expect fr
 class phone_sensor.PhoneSensor(): ...
 
 def PhoneSensor.__init__(self, *, qrcode=False, host='0.0.0.0', port=8000,
-                         logger=logging.getLogger('mvt.phone_sensor'), log_level=30,
+                         logger=logging.getLogger('mvt.phone_sensor'), log_level=logging.WARN,
                          proxy_client_from=None)
 ```
 
